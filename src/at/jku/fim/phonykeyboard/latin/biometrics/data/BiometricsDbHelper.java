@@ -1,8 +1,13 @@
 package at.jku.fim.phonykeyboard.latin.biometrics.data;
 
+import com.sun.rowset.CachedRowSetImpl;
+import org.sqlite.SQLiteConfig;
+
+import javax.sql.rowset.CachedRowSet;
 import java.io.File;
 import java.sql.*;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -25,8 +30,9 @@ public class BiometricsDbHelper {
         File dbFile = new File(DATABASE_NAME);
         boolean exists = dbFile.exists();
         try {
-            connection = DriverManager.getConnection("jdbc:sqlite:" + DATABASE_NAME);
-            if (!dbFile.exists()) {
+            //connection = DriverManager.getConnection("jdbc:sqlite:" + DATABASE_NAME);
+            connection = DriverManager.getConnection("jdbc:sqlite::memory:");
+            if (!exists) {
                 onCreate(connection);
             }
             onOpen(connection);
@@ -49,16 +55,18 @@ public class BiometricsDbHelper {
         if (!db.isValid(0)) {
             throw new IllegalArgumentException("DB not opened");
         }
-        Statement statement = db.createStatement();
-        statement.execute("PRAGMA user_version = " + DATABASE_VERSION);
-        statement.execute(BiometricsContract.SQL_CREATE_CONTRACT_VERSIONS);
-        statement.execute(BiometricsContract.SQL_CREATE_CONTEXTS);
 
-        ContentValues values = new ContentValues(2);
-        for (Contract contract : contracts) {
-            createContractTables(db, contract, values);
+        try (Statement statement = db.createStatement()) {
+            statement.execute("PRAGMA user_version = " + DATABASE_VERSION);
+            statement.execute(BiometricsContract.SQL_CREATE_CONTRACT_VERSIONS);
+            statement.execute(BiometricsContract.SQL_CREATE_CONTEXTS);
+
+            ContentValues values = new ContentValues(2);
+            for (Contract contract : contracts) {
+                createContractTables(db, contract, values);
+            }
+            wasCreated = true;
         }
-        wasCreated = true;
     }
 
     private void createContractTables(Connection db, Contract contract, ContentValues values) throws SQLException {
@@ -91,7 +99,7 @@ public class BiometricsDbHelper {
         try (Statement statement = db.createStatement()) {
             ResultSet result = statement.executeQuery("PRAGMA user_version");
             if (result.next()) {
-                int version = result.getInt(0);
+                int version = result.getInt(1);
                 if (version < DATABASE_VERSION) {
                     onUpgrade(db, version, DATABASE_VERSION);
                 }
@@ -114,7 +122,7 @@ public class BiometricsDbHelper {
         }
         selection.append(")");
 
-        ResultSet c = query(false, BiometricsContract.ContractVersions.TABLE_NAME,
+        Cursor c = query(false, BiometricsContract.ContractVersions.TABLE_NAME,
                 new String[] { BiometricsContract.ContractVersions.COLUMN_CONTRACT, BiometricsContract.ContractVersions.COLUMN_VERSION },
                 selection.toString(), selectionArgs, null, null, null, null);
         for (Contract contract : contracts) {
@@ -140,7 +148,7 @@ public class BiometricsDbHelper {
         if (wasCreated) {
             createContractTables(connection, contract, null);
         } else {
-            ResultSet c = query(false, BiometricsContract.ContractVersions.TABLE_NAME,
+            Cursor c = query(false, BiometricsContract.ContractVersions.TABLE_NAME,
                     new String[] { BiometricsContract.ContractVersions.COLUMN_CONTRACT, BiometricsContract.ContractVersions.COLUMN_VERSION },
                     BiometricsContract.ContractVersions.COLUMN_CONTRACT + " = ?", new String[] { contract.getClass().getSimpleName() }, null, null, null, null);
             if (c.isAfterLast()) {
@@ -157,13 +165,14 @@ public class BiometricsDbHelper {
         contracts.remove(contract);
     }
 
-    public ResultSet query(boolean distinct, String table, String[] columns, String selection, String[] selectionArgs, String groupBy, String having, String orderBy, String limit) throws SQLException {
+    public Cursor query(boolean distinct, String table, String[] columns, String selection, String[] selectionArgs, String groupBy, String having, String orderBy, String limit) throws SQLException {
         String query = buildQueryString(distinct, table, columns, selection, groupBy, having, orderBy, limit);
-        try (PreparedStatement statement = connection.prepareStatement(query, ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_READ_ONLY)) {
+        try (PreparedStatement statement = connection.prepareStatement(query)) {
             for (int i = 0; i < selectionArgs.length; i++) {
-                statement.setString(i, selectionArgs[i]);
+                statement.setObject(i + 1, selectionArgs[i]);
             }
-            return statement.executeQuery();
+            ResultSet result = statement.executeQuery();
+            return new Cursor(result);
         }
     }
 
@@ -223,7 +232,7 @@ public class BiometricsDbHelper {
         sql.append(table);
         sql.append('(');
 
-        Object[] bindArgs = null;
+        Object[] bindArgs;
         int size = (initialValues != null && initialValues.size() > 0)
                 ? initialValues.size() : 0;
         if (size > 0) {
@@ -244,9 +253,10 @@ public class BiometricsDbHelper {
         }
         sql.append(')');
 
-        NamedParameterStatement statement = new NamedParameterStatement(connection, sql.toString());
-        for (String key : initialValues.keySet()) {
-            initialValues.bind(statement, key);
+        PreparedStatement statement = connection.prepareStatement(sql.toString());
+        int i = 1;
+        for (Object value : initialValues.values()) {
+            statement.setObject(i++, value);
         }
         try {
             return statement.execute();
@@ -280,9 +290,11 @@ public class BiometricsDbHelper {
             sql.append(whereClause);
         }
 
-        NamedParameterStatement statement = new NamedParameterStatement(connection, sql.toString());
-        for (String key : values.keySet()) {
-            values.bind(statement, key);
+        PreparedStatement statement = connection.prepareStatement(sql.toString());
+        i = 0;
+        for (Object value : values.values()) {
+            statement.setObject(i, value);
+            i++;
         }
         try {
             return statement.execute();
@@ -291,28 +303,13 @@ public class BiometricsDbHelper {
         }
     }
 
-    public static class ContentValues extends HashMap<String, Object> {
+    public static class ContentValues extends LinkedHashMap<String, Object> {
         public ContentValues() {
             super(8);
         }
 
         public ContentValues(int size) {
             super(size, 1.0f);
-        }
-
-        public void bind(NamedParameterStatement statement, String key) throws SQLException {
-            Object value = get(key);
-            if (value instanceof String) {
-                statement.setString(key, (String) value);
-            } else if (value instanceof Long) {
-                statement.setLong(key, (Long) value);
-            } else if (value instanceof Integer) {
-                statement.setInt(key, (Integer) value);
-            } else if (value instanceof Timestamp) {
-                statement.setTimestamp(key, (Timestamp)value);
-            } else {
-                statement.setObject(key, value);
-            }
         }
     }
 }

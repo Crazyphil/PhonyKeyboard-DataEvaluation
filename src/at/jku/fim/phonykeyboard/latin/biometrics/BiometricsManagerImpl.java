@@ -6,8 +6,6 @@ import at.jku.fim.phonykeyboard.latin.biometrics.classifiers.StatisticalClassifi
 import at.jku.fim.phonykeyboard.latin.biometrics.data.BiometricsDbHelper;
 
 public class BiometricsManagerImpl extends BiometricsManager {
-    /*public static final String TAG = "BiometricsManagerImpl";*/
-
     private Classifier classifier;
     private BiometricsDbHelper dbHelper;
 

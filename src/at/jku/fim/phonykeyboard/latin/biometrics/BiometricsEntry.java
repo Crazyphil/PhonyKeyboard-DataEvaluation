@@ -15,7 +15,7 @@ public class BiometricsEntry {
         sensorData = new ArrayList<>(sensorCount);
     }
 
-    public void setProperties(int pointerId, int eventType, long timestamp,float x, float y, float size, float orientation, float pressure, int screenOrientation) {
+    public void setProperties(int pointerId, int eventType, long timestamp, float x, float y, float size, float orientation, float pressure, int screenOrientation) {
         this.timestamp = timestamp;
         this.screenOrientation = screenOrientation;
         this.pointerId = pointerId;
@@ -27,8 +27,8 @@ public class BiometricsEntry {
         this.pressure = pressure;
     }
 
-    public void addSensorData(float[] data) {
-        sensorData.add(data);
+    public void setSensorData(List<float[]> data) {
+        sensorData = new ArrayList<>(data);
     }
 
     public long getTimestamp() {
