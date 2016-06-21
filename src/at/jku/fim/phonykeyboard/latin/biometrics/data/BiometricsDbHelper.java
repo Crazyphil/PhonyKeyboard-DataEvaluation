@@ -225,7 +225,7 @@ public class BiometricsDbHelper {
         }
     }
 
-    public boolean insert(String table, ContentValues initialValues) throws SQLException {
+    public int insert(String table, ContentValues initialValues) throws SQLException {
         StringBuilder sql = new StringBuilder();
         sql.append("INSERT");
         sql.append(" INTO ");
@@ -259,7 +259,8 @@ public class BiometricsDbHelper {
             statement.setObject(i++, value);
         }
         try {
-            return statement.execute();
+            statement.execute();
+            return statement.getGeneratedKeys().getInt(1);
         } finally {
             statement.close();
         }
@@ -298,6 +299,21 @@ public class BiometricsDbHelper {
         }
         try {
             return statement.execute();
+        } finally {
+            statement.close();
+        }
+    }
+
+    public int delete(String table, String whereClause, String[] whereArgs) throws SQLException {
+        PreparedStatement statement = connection.prepareStatement("DELETE FROM " + table +
+                (whereClause != null && !whereClause.isEmpty() ? " WHERE " + whereClause : ""));
+        int i = 0;
+        for (String arg : whereArgs) {
+            statement.setObject(i, arg);
+            i++;
+        }
+        try {
+            return statement.executeUpdate();
         } finally {
             statement.close();
         }

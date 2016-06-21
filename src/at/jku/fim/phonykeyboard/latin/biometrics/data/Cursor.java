@@ -58,6 +58,15 @@ public class Cursor {
         return getInt(getColumnIndex(columnName));
     }
 
+    public double getDouble(int columnIndex) throws SQLException {
+        validColumnIndex(columnIndex);
+        return (double)data.get(currentRow-1)[columnIndex];
+    }
+
+    public double getDouble(String columnName) throws SQLException {
+        return getDouble(getColumnIndex(columnName));
+    }
+
     public String getString(int columnIndex) throws SQLException {
         validColumnIndex(columnIndex);
         return (String)data.get(currentRow-1)[columnIndex];
