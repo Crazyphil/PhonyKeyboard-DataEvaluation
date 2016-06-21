@@ -27,6 +27,10 @@ public class StatisticalClassifier extends Classifier {
 
     // NOTE: Used for evaluation to quickly disable enhancements
     private static final boolean EVALUATION_ENABLE_BESTOF = false;
+    // NOTE: Used for evaluation to set the variability calculation function
+    private static final int EVALUATION_VARIABILITY_FUNCTION = 2;
+    // NOTE: Used for evaluation to set the distance calculation function
+    private static final int EVALUATION_DISTANCE_FUNCTION = 0;
 
     private final StatisticalClassifierContract dbContract;
     private final Pattern multiValueRegex = Pattern.compile("\\" + MULTI_VALUE_SEPARATOR);
@@ -255,9 +259,17 @@ public class StatisticalClassifier extends Classifier {
      */
     private double getDistance(double[][] f1, double[][] f2) {
         double distance = 0;
-        // Calculate Manhattan distance for all datapoints
+        // Calculate distance for all datapoints
         for (int k = 0; k < f1.length; k++) {
-            distance += manhattanDistance(f1[k], f2[k]);
+            switch (EVALUATION_DISTANCE_FUNCTION) {
+                case 1:
+                    distance += euclideanDistance(f1[k], f2[k]);
+                    break;
+                case 0:
+                default:
+                    distance += manhattanDistance(f1[k], f2[k]);
+                    break;
+            }
         }
         distance /= f1.length;
         return distance;
@@ -288,26 +300,23 @@ public class StatisticalClassifier extends Classifier {
             return;
         }
 
-        // Calculate mean of distance to template acquisitions
-        double mean = 0;
-        for (int i = 0; i < acquisitions.size(); i++) {
-            double distance = 0;
-            for (int row = 0; row < acquisitions.get(i).length; row++) {
-                if (currentData.get(i).size() != acquisitions.get(i)[row].length) {
-                    Log.e(TAG, "Authentication data has " + currentData.get(i).size() + " samples, needs " + acquisitions.get(i)[row].length);
-                    score = BiometricsManager.SCORE_CAPTURING_ERROR;
-                    invalidData = true;
-                    return;
-                }
-
-                double[][] rowData = new double[currentData.get(i).size()][currentData.get(i).get(0).length];
-                distance += getDistance(acquisitions.get(i)[row], currentData.get(i).toArray(rowData));
-            }
-            distance /= distances[i] == 0f ? 1f : distances[i];
-            mean += distance;
+        // Calculate variability of captured and template acquisitions
+        switch (EVALUATION_VARIABILITY_FUNCTION) {
+            case 0:
+                score = minVariability();
+                break;
+            case 1:
+                score = maxVariability();
+                break;
+            case 3:
+                score = tempVariability();
+                break;
+            case 2:
+            default:
+                score = meanVariability();
+                break;
         }
-        mean /= acquisitions.size();
-        score = mean;
+        score = meanVariability();
         calculatedScore = true;
     }
 
@@ -324,12 +333,134 @@ public class StatisticalClassifier extends Classifier {
         return doubles;
     }
 
+    // ---- BEGIN DISTANCE METRICS ----
     private double manhattanDistance(double[] f1, double[] f2) {
         double result = 0;
         for (int i = 0; i < f1.length; i++) {
             result += Math.abs(f1[i] - f2[i]);
         }
         return result;
+    }
+
+    private double euclideanDistance(double[] f1, double[] f2) {
+        double result = 0;
+        for (int i = 0; i < f1.length; i++) {
+            result += Math.pow(f1[i] - f2[i], 2);
+        }
+        return result;
+    }
+    // ---- END DISTANCE METRICS ----
+
+    // ---- BEGIN VARIABILITY METRICS ----
+    private double minVariability() {
+        double min = Double.MAX_VALUE;
+        for (int e = 0; e < acquisitions.size(); e++) { // SUM(e=1, E)
+            double distance = Double.MAX_VALUE;
+            for (int i = 0; i < acquisitions.get(e).length; i++) {
+                if (i == e) continue;
+                if (!ensureEqualSampleCount(currentData.get(e).size(), acquisitions.get(e)[i].length, e, i)) {
+                    return Double.NaN;
+                }
+
+                double[][] rowData = new double[currentData.get(e).size()][currentData.get(e).get(0).length];
+                distance = Math.min(distance, getDistance(acquisitions.get(e)[i], currentData.get(e).toArray(rowData)));    // MIN(D[f(e), f(i)])
+            }
+            min += distance;
+        }
+        min /= acquisitions.size();    // 1/E
+        return min;
+    }
+
+    private double maxVariability() {
+        double max = Double.MIN_VALUE;
+        for (int e = 0; e < acquisitions.size(); e++) { // SUM(e=1, E)
+            double distance = Double.MIN_VALUE;
+            for (int i = 0; i < acquisitions.get(e).length; i++) {
+                if (i == e) continue;
+                if (!ensureEqualSampleCount(currentData.get(e).size(), acquisitions.get(e)[i].length, e, i)) {
+                    return Double.NaN;
+                }
+
+                double[][] rowData = new double[currentData.get(e).size()][currentData.get(e).get(0).length];
+                distance = Math.max(distance, getDistance(acquisitions.get(e)[i], currentData.get(e).toArray(rowData)));    // MIN(D[f(e), f(i)])
+            }
+            max += distance;
+        }
+        max /= acquisitions.size();    // 1/E
+        return max;
+    }
+
+    private double meanVariability() {
+        double mean = 0;
+        for (int e = 0; e < acquisitions.size(); e++) { // SUM(e=1, E)
+            double distance = 0;
+            for (int i = 0; i < acquisitions.get(e).length; i++) {    // SUM(i=1, E, i!=e)
+                if (i == e) continue;
+                if (!ensureEqualSampleCount(currentData.get(e).size(), acquisitions.get(e)[i].length, e, i)) {
+                    return Double.NaN;
+                }
+
+                double[][] rowData = new double[currentData.get(e).size()][currentData.get(e).get(0).length];
+                distance += getDistance(acquisitions.get(e)[i], currentData.get(e).toArray(rowData));
+            }
+            distance /= distances[e] == 0f ? 1f : distances[e]; // 1/(E-1)
+            mean += distance;
+        }
+        mean /= acquisitions.size();    // 1/E
+        return mean;
+    }
+
+    private double tempVariability() {
+        double temp = 0;
+        int tu = getTemplateDynamics();
+        if (tu < 0) {
+            return Double.NaN;
+        }
+
+        for (int i = 0; i < acquisitions.size(); i++) { // SUM(e=1, E, e!=tu)
+            if (i == tu) continue;
+            if (!ensureEqualSampleCount(currentData.get(i).size(), acquisitions.get(i)[tu].length, i, tu)) {
+                return Double.NaN;
+            }
+
+            double[][] rowData = new double[currentData.get(i).size()][currentData.get(i).get(0).length];
+            temp += getDistance(acquisitions.get(i)[tu], currentData.get(i).toArray(rowData));
+        }
+        temp /= acquisitions.size();    // 1/E
+        return temp;
+    }
+
+    private int getTemplateDynamics() {
+        int tu = -1;
+        double minAvgDist = Double.MAX_VALUE;
+        for (int e = 0; e < acquisitions.size(); e++) {
+            double distance = 0;
+            for (int i = 0; i < acquisitions.get(e).length; i++) {    // SUM(i=1, E, i!=e)
+                if (!ensureEqualSampleCount(currentData.get(e).size(), acquisitions.get(e)[i].length, e, i)) {
+                    return -1;
+                }
+
+                double[][] rowData = new double[currentData.get(e).size()][currentData.get(e).get(0).length];
+                distance += getDistance(acquisitions.get(e)[i], currentData.get(e).toArray(rowData));
+            }
+            distance /= distances[e] == 0f ? 1f : distances[e]; // 1/(E-1)
+            if (distance < minAvgDist) {
+                tu = e;
+                minAvgDist = distance;
+            }
+        }
+        return tu;
+    }
+    // ---- END VARIABILITY METRICS
+
+    private boolean ensureEqualSampleCount(int authenticationCount, int acquisitionCount, int i, int k) {
+        if (authenticationCount != acquisitionCount) {
+            Log.e(TAG, "Authentication data has " + currentData.get(i).size() + " samples, needs " + acquisitions.get(i)[k].length);
+            score = BiometricsManager.SCORE_CAPTURING_ERROR;
+            invalidData = true;
+            return false;
+        }
+        return true;
     }
 
     private void saveBiometricData() {
