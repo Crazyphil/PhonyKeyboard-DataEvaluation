@@ -300,23 +300,28 @@ public class StatisticalClassifier extends Classifier {
             return;
         }
 
+        double result;
         // Calculate variability of captured and template acquisitions
         switch (EVALUATION_VARIABILITY_FUNCTION) {
             case 0:
-                score = minVariability();
+                result = minVariability();
                 break;
             case 1:
-                score = maxVariability();
+                result = maxVariability();
                 break;
             case 3:
-                score = tempVariability();
+                result = tempVariability();
                 break;
             case 2:
             default:
-                score = meanVariability();
+                result = meanVariability();
                 break;
         }
-        score = meanVariability();
+
+        // NaN results from unequal sample sizes, score will already be set to SCORE_CAPTURING_ERROR by ensureEqualSampleCount()
+        if (!Double.isNaN(result)) {
+            score = result;
+        }
         calculatedScore = true;
     }
 
