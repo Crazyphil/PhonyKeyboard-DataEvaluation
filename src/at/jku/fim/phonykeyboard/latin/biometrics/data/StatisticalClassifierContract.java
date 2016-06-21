@@ -3,11 +3,19 @@ package at.jku.fim.phonykeyboard.latin.biometrics.data;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Struct;
 
 public class StatisticalClassifierContract extends Contract {
-    public static final int DATABASE_VERSION = 1;
+    public static final int DATABASE_VERSION = 2;
 
     private final String sqlCreateData;
+
+    private final String SQL_CREATE_TEMPLATES = "CREATE TABLE " + StatisticalClassifierTemplates.TABLE_NAME + " (" +
+            StatisticalClassifierTemplates._ID + " INTEGER PRIMARY KEY, " +
+            StatisticalClassifierTemplates.COLUMN_CONTEXT + " INTEGER, " +
+            StatisticalClassifierTemplates.COLUMN_SCREEN_ORIENTATION + " INTEGER, " +
+            StatisticalClassifierTemplates.COLUMN_DATA_ID + " INTEGER, " +
+            StatisticalClassifierTemplates.COLUMN_SCORE + " REAL)";
 
     private String[] sensorColumns;
 
@@ -44,6 +52,7 @@ public class StatisticalClassifierContract extends Contract {
         try {
             Statement statement = db.createStatement();
             statement.execute(sqlCreateData);
+            statement.execute(SQL_CREATE_TEMPLATES);
             statement.close();
         } catch (SQLException e) {
             e.printStackTrace();
@@ -52,6 +61,15 @@ public class StatisticalClassifierContract extends Contract {
 
     @Override
     public void onUpgrade(Connection db, int oldVersion, int newVersion) {
+        if (oldVersion < 2) {
+            try {
+                Statement statement = db.createStatement();
+                statement.execute(SQL_CREATE_TEMPLATES);
+                statement.close();
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     @Override
@@ -75,5 +93,15 @@ public class StatisticalClassifierContract extends Contract {
         public static final String COLUMN_SIZE = "size";            // n = k
         public static final String COLUMN_ORIENTATION = "orientation";            // n = k
         public static final String COLUMN_PRESSURE = "pressure";            // n = k
+    }
+
+    public static abstract class StatisticalClassifierTemplates {
+        public static final String TABLE_NAME = "StatisticalClassifierTemplates";
+        public static final String _ID = "_id";
+        public static final String _COUNT = "_count";
+        public static final String COLUMN_CONTEXT = "context";
+        public static final String COLUMN_SCREEN_ORIENTATION = "screen_orientation";
+        public static final String COLUMN_DATA_ID = "data_id";
+        public static final String COLUMN_SCORE = "score";
     }
 }

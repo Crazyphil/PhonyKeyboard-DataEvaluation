@@ -38,10 +38,10 @@ public class StatisticalClassifierEvaluation {
             processTestData();
         } else {
             if (cmd.hasOption("o")) {
-                processCsvFile(cmd.getOptionValue("o"));
+                processCsvFile(cmd.getOptionValue("o"), false);
             }
             if (cmd.hasOption("e")) {
-                processCsvFile(cmd.getOptionValue("e"));
+                processCsvFile(cmd.getOptionValue("e"), true);
             }
         }
     }
@@ -114,14 +114,14 @@ public class StatisticalClassifierEvaluation {
         }
 
         for (int i = 0; i < NUM_TEST_TRIES; i++) {
-            double score = calcScore(i, i * 1000, 0, keypresses, sensorX.length);
+            double score = calcScore(i, i * 1000, 0, keypresses, sensorX.length, false);
             if (score != BiometricsManager.SCORE_NOT_ENOUGH_DATA && score != 0) {
                 Log.e(TAG, String.format("Deviating score in try %d: %f != 0.0", i, score));
             }
         }
     }
 
-    private static void processCsvFile(String csvFile) {
+    private static void processCsvFile(String csvFile, boolean evaluationMode) {
         CSVReader reader = null;
         try {
             reader = new CSVReader(new BufferedReader(new FileReader(csvFile)), CsvUtils.COMMA, CsvUtils.QUOTE);
@@ -140,7 +140,7 @@ public class StatisticalClassifierEvaluation {
                 }
                 if (reader.getRecordsRead() > 1) {
                     Log.i(TAG, String.format("Processing entry %d", reader.getRecordsRead()));
-                    processLine(line);
+                    processLine(line, evaluationMode);
                 } else {
                     Log.i(TAG, "Creating column index mapping");
                     for (int i = 0; i < line.length; i++) {
@@ -156,7 +156,7 @@ public class StatisticalClassifierEvaluation {
         }
     }
 
-    private static void processLine(String[] line) {
+    private static void processLine(String[] line, boolean evaluationMode) {
         int id = toInt(line[columnMapping.get(StatisticalClassifierContract.StatisticalClassifierData._ID)]);
         long timestamp = toLong(line[columnMapping.get(COLUMN_TIMESTAMP)]);
         int screenOrientation = toInt(line[columnMapping.get(StatisticalClassifierContract.StatisticalClassifierData.COLUMN_SCREEN_ORIENTATION)]);
@@ -213,10 +213,10 @@ public class StatisticalClassifierEvaluation {
         for (int i = 0; i < sensors.length; i++) {
             keypresses[0].addSensorData(new float[keypresses[1].getSensorData().get(i).length]);
         }
-        calcScore(id, timestamp, screenOrientation, keypresses, sensors.length);
+        calcScore(id, timestamp, screenOrientation, keypresses, sensors.length, evaluationMode);
     }
 
-    private static double calcScore(int tryId, long timestamp, int screenOrientation, Keypress[] keypresses, int sensorCount) {
+    private static double calcScore(int tryId, long timestamp, int screenOrientation, Keypress[] keypresses, int sensorCount, boolean evaluationMode) {
         BiometricsManagerImpl manager = (BiometricsManagerImpl)BiometricsManager.getInstance();
         manager.setScreenOrientation(screenOrientation);
         StatisticalClassifier classifier = (StatisticalClassifier)manager.getClassifier();
@@ -234,9 +234,9 @@ public class StatisticalClassifierEvaluation {
                 classifier.onKeyEvent(entry);
             }
         }
-        classifier.onFinishInput(true);
+        classifier.onFinishInput(true, evaluationMode);
 
-        double score = classifier.getScore();
+        double score = classifier.getScore(evaluationMode);
         if (score == BiometricsManager.SCORE_CAPTURING_ERROR) {
             Log.e(TAG, "Capturing error, check data");
         } else if (score == BiometricsManager.SCORE_NOT_ENOUGH_DATA) {

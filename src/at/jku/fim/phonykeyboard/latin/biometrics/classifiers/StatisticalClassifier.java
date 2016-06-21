@@ -2,6 +2,7 @@ package at.jku.fim.phonykeyboard.latin.biometrics.classifiers;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.DoubleSummaryStatistics;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -24,12 +25,15 @@ public class StatisticalClassifier extends Classifier {
     private static final int INDEX_DOWNDOWN = 0, INDEX_DOWNUP = 1, INDEX_SIZE =  2, INDEX_ORIENTATION = 3, INDEX_PRESSURE = 4, INDEX_POSITION = 5, INDEX_SENSOR_START = 6;
     private static final int TEMPLATE_SET_SIZE = 10;
 
+    // NOTE: Used for evaluation to quickly disable enhancements
+    private static final boolean EVALUATION_ENABLE_BESTOF = false;
+
     private final StatisticalClassifierContract dbContract;
     private final Pattern multiValueRegex = Pattern.compile("\\" + MULTI_VALUE_SEPARATOR);
 
     private int screenOrientation;
     private List<double[][][]> acquisitions;  // datapoint<[row][col][values]>
-    private double[] means;
+    private double[] distances; // Distances for each enrollment templates
     private boolean invalidData;
     private ActiveBiometricsEntries activeEntries = new ActiveBiometricsEntries();
     private List<List<double[]>> currentData;   // datapoint<col<[values]>>
@@ -53,9 +57,16 @@ public class StatisticalClassifier extends Classifier {
 
     @Override
     public double getScore() {
+        return getScore(false);
+    }
+
+    // NOTE: The discard parameter is used for evaluation to avoid polluting the dataset of the original user
+    public double getScore(boolean discard) {
         if (!calculatedScore) {
             calcScore();
-            saveBiometricData();
+            if (!discard) {
+                saveBiometricData();
+            }
             resetData();
         }
         return score;
@@ -94,11 +105,20 @@ public class StatisticalClassifier extends Classifier {
 
         Cursor c = null;
         try {
-            c = manager.getDb().query(false, StatisticalClassifierContract.StatisticalClassifierData.TABLE_NAME,
-                    columns.toArray(new String[columns.size()]),
-                    StatisticalClassifierContract.StatisticalClassifierData.COLUMN_CONTEXT + " = ? AND " + StatisticalClassifierContract.StatisticalClassifierData.COLUMN_SCREEN_ORIENTATION + " = ?",
-                    new String[] { String.valueOf(context), String.valueOf(screenOrientation) },
-                    null, null, null, null);
+            if (EVALUATION_ENABLE_BESTOF) {
+                c = manager.getDb().query(false, StatisticalClassifierContract.StatisticalClassifierData.TABLE_NAME,
+                        columns.toArray(new String[columns.size()]),
+                        StatisticalClassifierContract.StatisticalClassifierData.COLUMN_CONTEXT + " = ? AND " + StatisticalClassifierContract.StatisticalClassifierData.COLUMN_SCREEN_ORIENTATION + " = ? AND " + StatisticalClassifierContract.StatisticalClassifierData._ID + " IN (" +
+                                "SELECT " + StatisticalClassifierContract.StatisticalClassifierTemplates.COLUMN_DATA_ID + " FROM " + StatisticalClassifierContract.StatisticalClassifierTemplates.TABLE_NAME + " WHERE " + StatisticalClassifierContract.StatisticalClassifierTemplates.COLUMN_CONTEXT + " = ? AND " + StatisticalClassifierContract.StatisticalClassifierTemplates.COLUMN_SCREEN_ORIENTATION + " = ?)",
+                        new String[] { String.valueOf(context), String.valueOf(screenOrientation), String.valueOf(context), String.valueOf(screenOrientation) },
+                        null, null, null, null);
+            } else {
+                c = manager.getDb().query(false, StatisticalClassifierContract.StatisticalClassifierData.TABLE_NAME,
+                        columns.toArray(new String[columns.size()]),
+                        StatisticalClassifierContract.StatisticalClassifierData.COLUMN_CONTEXT + " = ? AND " + StatisticalClassifierContract.StatisticalClassifierData.COLUMN_SCREEN_ORIENTATION + " = ?",
+                        new String[] { String.valueOf(context), String.valueOf(screenOrientation) },
+                        null, null, null, null);
+            }
 
             c.beforeFirst();
             currentData = new ArrayList<>(c.getColumnCount());
@@ -111,7 +131,7 @@ public class StatisticalClassifier extends Classifier {
             calculatedScore = false;
             score = BiometricsManager.SCORE_NOT_ENOUGH_DATA;
 
-            means = new double[c.getColumnCount()];
+            distances = new double[c.getColumnCount()];
             acquisitions = new ArrayList<>(c.getColumnCount());
             for (int i = 0; i < c.getColumnCount(); i++) {
                 acquisitions.add(new double[c.getCount()][0][0]);
@@ -130,6 +150,11 @@ public class StatisticalClassifier extends Classifier {
 
     @Override
     public void onFinishInput(boolean done) {
+        onFinishInput(done, false);
+    }
+
+    // NOTE: The discard parameter is used for evaluation to avoid polluting the dataset of the original user
+    public void onFinishInput(boolean done, boolean discard) {
         if (!done) {
             CharSequence text = manager.getInputText();
             if (text != null && text.length() != 0) {
@@ -137,7 +162,9 @@ public class StatisticalClassifier extends Classifier {
             }
         } else if (!calculatedScore) {
             calcScore();
-            saveBiometricData();
+            if (!discard) {
+                saveBiometricData();
+            }
             resetData();
         }
     }
@@ -212,9 +239,9 @@ public class StatisticalClassifier extends Classifier {
                     if (e == i) continue;
                     mean += getDistance(values[e], values[i]);
                 }
-                means[columnIndex] += mean / Math.max(c.getCount() - 1, 1);
+                distances[columnIndex] += mean / Math.max(c.getCount() - 1, 1);
             }
-            means[columnIndex] /= c.getCount();
+            distances[columnIndex] /= c.getCount();
         } catch (SQLException e) {
             e.printStackTrace();
         }
@@ -276,7 +303,7 @@ public class StatisticalClassifier extends Classifier {
                 double[][] rowData = new double[currentData.get(i).size()][currentData.get(i).get(0).length];
                 distance += getDistance(acquisitions.get(i)[row], currentData.get(i).toArray(rowData));
             }
-            distance /= means[i] == 0f ? 1f : means[i];
+            distance /= distances[i] == 0f ? 1f : distances[i];
             mean += distance;
         }
         mean /= acquisitions.size();
@@ -322,8 +349,46 @@ public class StatisticalClassifier extends Classifier {
             values.put(dbContract.getSensorColumns()[i], CsvUtils.join(toCsvStrings(currentData.get(INDEX_SENSOR_START + i))));
         }
 
+        int index = 0;
         try {
-            db.insert(StatisticalClassifierContract.StatisticalClassifierData.TABLE_NAME, values);
+            index = db.insert(StatisticalClassifierContract.StatisticalClassifierData.TABLE_NAME, values);
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        if (EVALUATION_ENABLE_BESTOF && index > 0) {
+            try {
+                Cursor c = db.query(false, StatisticalClassifierContract.StatisticalClassifierTemplates.TABLE_NAME,
+                        new String[] {StatisticalClassifierContract.StatisticalClassifierTemplates._ID, StatisticalClassifierContract.StatisticalClassifierTemplates.COLUMN_DATA_ID, StatisticalClassifierContract.StatisticalClassifierTemplates.COLUMN_SCORE },
+                        StatisticalClassifierContract.StatisticalClassifierTemplates.COLUMN_CONTEXT + " = ? AND " + StatisticalClassifierContract.StatisticalClassifierTemplates.COLUMN_SCREEN_ORIENTATION + " = ?",
+                        new String[] { String.valueOf(manager.getBiometricsContext()), String.valueOf(screenOrientation) }, null, null, StatisticalClassifierContract.StatisticalClassifierTemplates.COLUMN_SCORE, null);
+                if (c.getCount() < TEMPLATE_SET_SIZE) {
+                    saveTemplate(index);
+                } else {
+                    while (c.next()) {
+                        if (score < c.getDouble(StatisticalClassifierContract.StatisticalClassifierTemplates.COLUMN_SCORE)) {
+                            db.delete(StatisticalClassifierContract.StatisticalClassifierTemplates.TABLE_NAME,
+                                    StatisticalClassifierContract.StatisticalClassifierTemplates._ID + " = ?",
+                                    new String[] { String.valueOf(c.getInt(StatisticalClassifierContract.StatisticalClassifierTemplates._ID)) });
+                            saveTemplate(index);
+                        }
+                    }
+                }
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private void saveTemplate(int dbId) {
+        BiometricsDbHelper db = manager.getDb();
+        BiometricsDbHelper.ContentValues values = new BiometricsDbHelper.ContentValues(4);
+        values.put(StatisticalClassifierContract.StatisticalClassifierTemplates.COLUMN_CONTEXT, manager.getBiometricsContext());
+        values.put(StatisticalClassifierContract.StatisticalClassifierTemplates.COLUMN_SCREEN_ORIENTATION, screenOrientation);
+        values.put(StatisticalClassifierContract.StatisticalClassifierTemplates.COLUMN_DATA_ID, dbId);
+        values.put(StatisticalClassifierContract.StatisticalClassifierTemplates.COLUMN_SCORE, score);
+        try {
+            db.insert(StatisticalClassifierContract.StatisticalClassifierTemplates.TABLE_NAME, values);
         } catch (SQLException e) {
             e.printStackTrace();
         }
