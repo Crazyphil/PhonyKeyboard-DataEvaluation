@@ -104,4 +104,11 @@ public class StatisticalClassifierContract extends Contract {
         public static final String COLUMN_DATA_ID = "data_id";
         public static final String COLUMN_SCORE = "score";
     }
+
+    public static abstract class CaptureClassifierData {
+        public static final String COLUMN_TIMESTAMP = "timestamp";
+        public static final String COLUMN_KEY = "key";
+        public static final String COLUMN_INPUTMETHOD = "inputmethod";
+        public static final String COLUMN_SITUATION = "situation";
+    }
 }

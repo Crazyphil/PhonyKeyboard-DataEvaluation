@@ -21,7 +21,6 @@ public class StatisticalClassifierEvaluation {
     private static final String TAG = "StatisticalClassifierEvaluation";
     private static final int NUM_TEST_KEYPRESSES = 10, NUM_TEST_TRIES = 100;
     private static final int NUM_STATIC_COLUMNS = 9;
-    private static final String COLUMN_TIMESTAMP = "timestamp";
     private static final Map<String, Integer> columnMapping = new HashMap<>();
 
     private static final Pattern entryPattern = Pattern.compile(";");
@@ -158,8 +157,18 @@ public class StatisticalClassifierEvaluation {
 
     private static void processLine(String[] line, boolean evaluationMode) {
         int id = toInt(line[columnMapping.get(StatisticalClassifierContract.StatisticalClassifierData._ID)]);
-        long timestamp = toLong(line[columnMapping.get(COLUMN_TIMESTAMP)]);
+        long timestamp = toLong(line[columnMapping.get(StatisticalClassifierContract.CaptureClassifierData.COLUMN_TIMESTAMP)]);
         int screenOrientation = toInt(line[columnMapping.get(StatisticalClassifierContract.StatisticalClassifierData.COLUMN_SCREEN_ORIENTATION)]);
+
+        String[] key = new String[0];
+        int inputmethod = -1;
+        int situation = -1;
+        if (columnMapping.containsKey(StatisticalClassifierContract.CaptureClassifierData.COLUMN_KEY)) {
+            // Support both old and new study files
+            key = entryPattern.split(line[columnMapping.get(StatisticalClassifierContract.CaptureClassifierData.COLUMN_KEY)]);
+            inputmethod = toInt(line[columnMapping.get(StatisticalClassifierContract.CaptureClassifierData.COLUMN_INPUTMETHOD)]);
+            situation = toInt(line[columnMapping.get(StatisticalClassifierContract.CaptureClassifierData.COLUMN_INPUTMETHOD)]);
+        }
 
         String[] downDistances = entryPattern.split(line[columnMapping.get(StatisticalClassifierContract.StatisticalClassifierData.COLUMN_KEY_DOWNDOWN)]);
         String[] upDistances = entryPattern.split(line[columnMapping.get(StatisticalClassifierContract.StatisticalClassifierData.COLUMN_KEY_DOWNUP)]);
@@ -167,7 +176,12 @@ public class StatisticalClassifierEvaluation {
         String[] sizes = entryPattern.split(line[columnMapping.get(StatisticalClassifierContract.StatisticalClassifierData.COLUMN_SIZE)]);
         String[] orientations = entryPattern.split(line[columnMapping.get(StatisticalClassifierContract.StatisticalClassifierData.COLUMN_ORIENTATION)]);
         String[] pressures = entryPattern.split(line[columnMapping.get(StatisticalClassifierContract.StatisticalClassifierData.COLUMN_PRESSURE)]);
-        String[][] sensors = new String[line.length - NUM_STATIC_COLUMNS][0];
+        String[][] sensors;
+        if (key.length == 0) {
+            sensors = new String[line.length - NUM_STATIC_COLUMNS][0];
+        } else {
+            sensors = new String[line.length - NUM_STATIC_COLUMNS - 3][0];
+        }
 
         int sensorIndex = 0;
         for (String sensor : BiometricsManager.SENSOR_TYPES) {
@@ -180,7 +194,7 @@ public class StatisticalClassifierEvaluation {
         Log.i(TAG, String.format("Processing study id %d", id));
         if (upDistances.length != positions.length || positions.length != sizes.length || sizes.length != orientations.length
                 || orientations.length != pressures.length || downDistances.length != upDistances.length - 1) {
-            Log.e(TAG, "Unequal number of data points, skipping try");
+            Log.e(TAG, String.format("ID %d: Unequal number of data points, skipping try", id));
             return;
         }
 
@@ -202,7 +216,7 @@ public class StatisticalClassifierEvaluation {
                     if (sensor.length > 0) {
                         keypresses[i].addSensorData(toFloatArray(sensor[i - 1]));
                     } else {
-                        Log.e(TAG, String.format("A sensor has no data for keypress %d, skipping try", i + 1));
+                        Log.e(TAG, String.format("ID %d: A sensor has no data for keypress %d, skipping try", id, i + 1));
                         return;
                     }
                 }
@@ -238,7 +252,7 @@ public class StatisticalClassifierEvaluation {
 
         double score = classifier.getScore(evaluationMode);
         if (score == BiometricsManager.SCORE_CAPTURING_ERROR) {
-            Log.e(TAG, "Capturing error, check data");
+            Log.e(TAG, String.format("ID %d: Capturing error, check data", tryId));
         } else if (score == BiometricsManager.SCORE_NOT_ENOUGH_DATA) {
             Log.i(TAG, "No score yet, need more data");
         } else {
