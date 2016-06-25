@@ -7,6 +7,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.regex.Pattern;
 
+import at.jku.fim.phonykeyboard.evaluation.EvaluationParams;
 import at.jku.fim.phonykeyboard.latin.biometrics.BiometricsEntry;
 import at.jku.fim.phonykeyboard.latin.biometrics.BiometricsManager;
 import at.jku.fim.phonykeyboard.latin.biometrics.BiometricsManagerImpl;
@@ -23,14 +24,6 @@ import at.jku.fim.phonykeyboard.latin.utils.Log;
 public class StatisticalClassifier extends Classifier {
     private static final String TAG = "StatisticalClassifier";
     private static final int INDEX_DOWNDOWN = 0, INDEX_DOWNUP = 1, INDEX_SIZE =  2, INDEX_ORIENTATION = 3, INDEX_PRESSURE = 4, INDEX_POSITION = 5, INDEX_SENSOR_START = 6;
-    private static final int TEMPLATE_SET_SIZE = 10;
-
-    // NOTE: Used for evaluation to quickly disable enhancements
-    private static final boolean EVALUATION_ENABLE_BESTOF = false;
-    // NOTE: Used for evaluation to set the variability calculation function
-    private static final int EVALUATION_VARIABILITY_FUNCTION = 2;
-    // NOTE: Used for evaluation to set the distance calculation function
-    private static final int EVALUATION_DISTANCE_FUNCTION = 0;
 
     private final StatisticalClassifierContract dbContract;
     private final Pattern multiValueRegex = Pattern.compile("\\" + MULTI_VALUE_SEPARATOR);
@@ -110,7 +103,7 @@ public class StatisticalClassifier extends Classifier {
 
         Cursor c = null;
         try {
-            if (EVALUATION_ENABLE_BESTOF) {
+            if (EvaluationParams.enableTemplateSelection) {
                 c = manager.getDb().query(false, StatisticalClassifierContract.StatisticalClassifierData.TABLE_NAME,
                         columns.toArray(new String[columns.size()]),
                         StatisticalClassifierContract.StatisticalClassifierData.COLUMN_CONTEXT + " = ? AND " + StatisticalClassifierContract.StatisticalClassifierData.COLUMN_SCREEN_ORIENTATION + " = ? AND " + StatisticalClassifierContract.StatisticalClassifierData._ID + " IN (" +
@@ -264,7 +257,7 @@ public class StatisticalClassifier extends Classifier {
         double distance = 0;
         // Calculate distance for all features
         for (int k = 0; k < f1.length; k++) {
-            switch (EVALUATION_DISTANCE_FUNCTION) {
+            switch (EvaluationParams.distanceFunction) {
                 case 1:
                     distance += euclideanDistance(f1[k], f2[k]);
                     break;
@@ -288,7 +281,7 @@ public class StatisticalClassifier extends Classifier {
     }
 
     private void calcScore() {
-        if (acquisitions.get(0).length < TEMPLATE_SET_SIZE) {
+        if (acquisitions.get(0).length < EvaluationParams.acquisitionSetSize) {
             Log.i(TAG, "Template set too small (" + acquisitions.get(0).length + ") for authentication");
             score = BiometricsManager.SCORE_NOT_ENOUGH_DATA;
             calculatedScore = true;
@@ -348,7 +341,7 @@ public class StatisticalClassifier extends Classifier {
         if (acquisitions.get(0).length > 0) {
             for (int delta = 0; delta < acquisitions.size(); delta++) {
                 double result;
-                switch (EVALUATION_VARIABILITY_FUNCTION) {
+                switch (EvaluationParams.classificationFunction) {
                     case 0:
                         result = minVariability(delta);
                         break;
@@ -477,7 +470,7 @@ public class StatisticalClassifier extends Classifier {
         double result = Double.NaN;
         if (acquisitions.get(0).length > 0) {
             for (int delta = 0; delta < acquisitions.size(); delta++) {
-                switch (EVALUATION_VARIABILITY_FUNCTION) {
+                switch (EvaluationParams.classificationFunction) {
                     case 0:
                         result = minAuthentication();
                         break;
@@ -604,23 +597,16 @@ public class StatisticalClassifier extends Classifier {
             e.printStackTrace();
         }
 
-        if (EVALUATION_ENABLE_BESTOF && index > 0) {
+        if (EvaluationParams.enableTemplateSelection && index > 0) {
             try {
                 Cursor c = db.query(false, StatisticalClassifierContract.StatisticalClassifierTemplates.TABLE_NAME,
                         new String[] {StatisticalClassifierContract.StatisticalClassifierTemplates._ID, StatisticalClassifierContract.StatisticalClassifierTemplates.COLUMN_DATA_ID, StatisticalClassifierContract.StatisticalClassifierTemplates.COLUMN_SCORE },
                         StatisticalClassifierContract.StatisticalClassifierTemplates.COLUMN_CONTEXT + " = ? AND " + StatisticalClassifierContract.StatisticalClassifierTemplates.COLUMN_SCREEN_ORIENTATION + " = ?",
                         new String[] { String.valueOf(manager.getBiometricsContext()), String.valueOf(screenOrientation) }, null, null, StatisticalClassifierContract.StatisticalClassifierTemplates.COLUMN_SCORE, null);
-                if (c.getCount() < TEMPLATE_SET_SIZE) {
+                if (c.getCount() < EvaluationParams.acquisitionSetSize) {
                     saveTemplate(index);
-                } else {
-                    while (c.next()) {
-                        if (score < c.getDouble(StatisticalClassifierContract.StatisticalClassifierTemplates.COLUMN_SCORE)) {
-                            db.delete(StatisticalClassifierContract.StatisticalClassifierTemplates.TABLE_NAME,
-                                    StatisticalClassifierContract.StatisticalClassifierTemplates._ID + " = ?",
-                                    new String[] { String.valueOf(c.getInt(StatisticalClassifierContract.StatisticalClassifierTemplates._ID)) });
-                            saveTemplate(index);
-                        }
-                    }
+                } else if (c.getCount() == EvaluationParams.acquisitionSetSize) {
+                    // TODO: select best templateSetSize templates from acquisition set
                 }
             } catch (SQLException e) {
                 e.printStackTrace();
