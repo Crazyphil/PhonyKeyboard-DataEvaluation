@@ -308,9 +308,11 @@ public class BiometricsDbHelper {
         PreparedStatement statement = connection.prepareStatement("DELETE FROM " + table +
                 (whereClause != null && !whereClause.isEmpty() ? " WHERE " + whereClause : ""));
         int i = 0;
-        for (String arg : whereArgs) {
-            statement.setObject(i, arg);
-            i++;
+        if (whereArgs != null) {
+            for (String arg : whereArgs) {
+                statement.setObject(i, arg);
+                i++;
+            }
         }
         try {
             return statement.executeUpdate();
