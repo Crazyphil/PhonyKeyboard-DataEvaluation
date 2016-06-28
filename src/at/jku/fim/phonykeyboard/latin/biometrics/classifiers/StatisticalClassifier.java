@@ -1,10 +1,7 @@
 package at.jku.fim.phonykeyboard.latin.biometrics.classifiers;
 
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.DoubleSummaryStatistics;
-import java.util.LinkedList;
-import java.util.List;
+import java.util.*;
 import java.util.regex.Pattern;
 
 import at.jku.fim.phonykeyboard.evaluation.EvaluationParams;
@@ -30,7 +27,6 @@ public class StatisticalClassifier extends Classifier {
 
     private int screenOrientation;
     private List<double[][][]> acquisitions;  // feature<[row][sample][values]>
-    private double[] distances; // Distances for each enrollment template
     private double[] variability; // Variability scores of each feature of the enrollment templates
     private boolean invalidData;
     private ActiveBiometricsEntries activeEntries = new ActiveBiometricsEntries();
@@ -97,9 +93,7 @@ public class StatisticalClassifier extends Classifier {
         columns.add(StatisticalClassifierContract.StatisticalClassifierData.COLUMN_ORIENTATION);
         columns.add(StatisticalClassifierContract.StatisticalClassifierData.COLUMN_PRESSURE);
         columns.add(StatisticalClassifierContract.StatisticalClassifierData.COLUMN_POSITION);
-        for (String sensor : dbContract.getSensorColumns()) {
-            columns.add(sensor);
-        }
+        Collections.addAll(columns, dbContract.getSensorColumns());
 
         Cursor c = null;
         try {
@@ -129,11 +123,10 @@ public class StatisticalClassifier extends Classifier {
             calculatedScore = false;
             score = BiometricsManager.SCORE_NOT_ENOUGH_DATA;
 
-            distances = new double[c.getColumnCount()];
             acquisitions = new ArrayList<>(c.getColumnCount());
             for (int i = 0; i < c.getColumnCount(); i++) {
                 acquisitions.add(new double[c.getCount()][0][0]);
-                calcStatistics(c, i);
+                fillArray(c, i);
             }
             variability = new double[c.getColumnCount()];
             calcVariability();
@@ -215,7 +208,7 @@ public class StatisticalClassifier extends Classifier {
     public void onDestroy() {
     }
 
-    private void calcStatistics(Cursor c, int columnIndex) {
+    private void fillArray(Cursor c, int columnIndex) {
         if (c.getCount() == 0) return;
         double[][][] values = acquisitions.get(columnIndex);
 
@@ -231,17 +224,6 @@ public class StatisticalClassifier extends Classifier {
                 }
                 row++;
             }
-
-            double mean = 0;
-            // Calculate mean of distance between each and every row
-            for (int e = 0; e < c.getCount(); e++) {
-                for (int i = 0; i < c.getCount(); i++) {
-                    if (e == i) continue;
-                    mean += getDistance(values[e], values[i]);
-                }
-                distances[columnIndex] += mean / Math.max(c.getCount() - 1, 1);
-            }
-            distances[columnIndex] /= c.getCount();
         } catch (SQLException e) {
             e.printStackTrace();
         }
@@ -356,7 +338,7 @@ public class StatisticalClassifier extends Classifier {
                         result = meanVariability(delta);
                         break;
                 }
-                variability[delta] = result == 0f ? 1f : result;
+                variability[delta] = result;
             }
         }
     }
@@ -370,7 +352,7 @@ public class StatisticalClassifier extends Classifier {
         double min = 0;
         int E = acquisitions.get(delta).length;
         for (int e = 0; e < E; e++) {  // SUM(e=1, E)
-            double minDist = Double.MAX_VALUE;
+            double minDist = Double.POSITIVE_INFINITY;
             for (int i = 0; i < E; i++) {
                 if (i == e) continue;
                 minDist = Math.min(minDist, getDistance(acquisitions.get(delta)[e], acquisitions.get(delta)[i]));  // MIN(D[f(e), f(i)])
@@ -390,7 +372,7 @@ public class StatisticalClassifier extends Classifier {
         double max = 0;
         int E = acquisitions.get(delta).length;
         for (int e = 0; e < E; e++) {  // SUM(e=1, E)
-            double maxDist = Double.MIN_VALUE;
+            double maxDist = Double.NEGATIVE_INFINITY;
             for (int i = 0; i < E; i++) {
                 if (i == e) continue;
                 maxDist = Math.max(maxDist, getDistance(acquisitions.get(delta)[e], acquisitions.get(delta)[i]));  // MAX(D[f(e), f(i)])
@@ -447,8 +429,10 @@ public class StatisticalClassifier extends Classifier {
      */
     private int findTemplateDynamics(int delta) {
         int tu = -1;
-        double minAvgDist = Double.MAX_VALUE;
+        double minAvgDist = Double.POSITIVE_INFINITY;
         int E = acquisitions.get(delta).length;
+        if (E == 1) return 0;   // Avoid NaN through DIV/0
+
         for (int e = 0; e < E; e++) {
             double avgDist = 0;
             for (int i = 0; i < E; i++) {
@@ -493,7 +477,7 @@ public class StatisticalClassifier extends Classifier {
     private double minAuthentication() {
         double min = 0;
         for (int delta = 0; delta < currentData.size(); delta++) {
-            double minDist = Double.MAX_VALUE;
+            double minDist = Double.POSITIVE_INFINITY;
             int E = acquisitions.get(delta).length;
             for (int e = 0; e < E; e++) {
                 if (!ensureEqualSampleCount(delta, e)) {
@@ -503,7 +487,7 @@ public class StatisticalClassifier extends Classifier {
                 double[][] sample = new double[currentData.get(delta).size()][currentData.get(delta).get(0).length];
                 minDist = Math.min(minDist, getDistance(acquisitions.get(delta)[e], currentData.get(delta).toArray(sample)));  // MIN(D[f(e), f(u)])
             }
-            min += minDist / variability[delta];
+            min += variability[delta] == 0 ? 0 : (minDist / variability[delta]);
         }
         min /= currentData.size();   // 1/δ
         return min;
@@ -512,7 +496,7 @@ public class StatisticalClassifier extends Classifier {
     private double maxAuthentication() {
         double max = 0;
         for (int delta = 0; delta < currentData.size(); delta++) {
-            double maxDist = Double.MIN_VALUE;
+            double maxDist = Double.NEGATIVE_INFINITY;
             int E = acquisitions.get(delta).length;
             for (int e = 0; e < E; e++) {
                 if (!ensureEqualSampleCount(delta, e)) {
@@ -522,7 +506,7 @@ public class StatisticalClassifier extends Classifier {
                 double[][] sample = new double[currentData.get(delta).size()][currentData.get(delta).get(0).length];
                 maxDist = Math.max(maxDist, getDistance(acquisitions.get(delta)[e], currentData.get(delta).toArray(sample)));  // MAX(D[f(e), f(u)])
             }
-            max += maxDist / variability[delta];
+            max += variability[delta] == 0 ? 0 : (maxDist / variability[delta]);
         }
         max /= currentData.size();   // 1/δ
         return max;
@@ -541,7 +525,7 @@ public class StatisticalClassifier extends Classifier {
                 double[][] sample = new double[currentData.get(delta).size()][currentData.get(delta).get(0).length];
                 meanDist += getDistance(acquisitions.get(delta)[e], currentData.get(delta).toArray(sample));  // D[f(e), f(u)]
             }
-            mean += meanDist / variability[delta];
+            mean += variability[delta] == 0 ? 0 : (meanDist / variability[delta]);
         }
         mean /= currentData.size();   // 1/δ
         return mean;
@@ -556,7 +540,8 @@ public class StatisticalClassifier extends Classifier {
             }
 
             double[][] sample = new double[currentData.get(delta).size()][currentData.get(delta).get(0).length];
-            temp += getDistance(acquisitions.get(delta)[tu], currentData.get(delta).toArray(sample)) / variability[delta];
+            double tempDist = getDistance(acquisitions.get(delta)[tu], currentData.get(delta).toArray(sample));
+            temp += variability[delta] == 0 ? 0 : (tempDist / variability[delta]);
         }
         temp /= currentData.size();   // 1/δ
         return temp;
@@ -626,5 +611,19 @@ public class StatisticalClassifier extends Classifier {
         } catch (SQLException e) {
             e.printStackTrace();
         }
+    }
+
+    @Override
+    public boolean clearData() {
+        BiometricsDbHelper db = manager.getDb();
+        try {
+            db.delete(StatisticalClassifierContract.StatisticalClassifierData.TABLE_NAME, null, null);
+            if (EvaluationParams.enableTemplateSelection) {
+                db.delete(StatisticalClassifierContract.StatisticalClassifierTemplates.TABLE_NAME, null, null);
+            }
+        } catch (SQLException e) {
+            return false;
+        }
+        return true;
     }
 }
