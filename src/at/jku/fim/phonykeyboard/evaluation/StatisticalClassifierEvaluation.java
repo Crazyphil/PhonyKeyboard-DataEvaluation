@@ -11,16 +11,13 @@ import com.opencsv.CSVReader;
 import org.apache.commons.cli.*;
 
 import java.io.*;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Random;
-import java.util.StringJoiner;
+import java.util.*;
 import java.util.regex.Pattern;
 
 public class StatisticalClassifierEvaluation {
     private static final String TAG = "StatisticalClassifierEvaluation";
-    private static final int NUM_TEST_KEYPRESSES = 10, NUM_TEST_TRIES = 100;
     private static final int NUM_STATIC_COLUMNS = 9;
+    private static final int NUM_EVALUATION_KEYPRESSES = 6;
     private static final Map<String, Integer> columnMapping = new HashMap<>();
 
     private static final Pattern entryPattern = Pattern.compile(";");
@@ -33,14 +30,14 @@ public class StatisticalClassifierEvaluation {
         BiometricsManagerImpl manager = new BiometricsManagerImpl();
         manager.init();
 
-        if (cmd.hasOption("t")) {
-            processTestData();
+        if (cmd.hasOption("p")) {
+            findOptimumParams(cmd.getOptionValue("p"));
         } else {
             if (cmd.hasOption("o")) {
-                processCsvFile(cmd.getOptionValue("o"), false);
+                processCsvFile(cmd.getOptionValue("o"), false, null);
             }
             if (cmd.hasOption("e")) {
-                processCsvFile(cmd.getOptionValue("e"), true);
+                processCsvFile(cmd.getOptionValue("e"), true, null);
             }
         }
     }
@@ -49,8 +46,8 @@ public class StatisticalClassifierEvaluation {
         Options options = new Options();
         OptionGroup group = new OptionGroup();
         group.setRequired(true);
-        group.addOption(Option.builder("t").desc("Test mode, use the same (generated) data many times, resulting in a 0-score").build());
         group.addOption(Option.builder("o").hasArg().type(String.class).desc("Ordered mode, evaluate one user as given in file").build());
+        group.addOption(Option.builder("p").hasArg().type(String.class).desc("Parameter optimization mode, does magic").build());
         options.addOption("d", "Only output data to STDOUT instead of full log");
         options.addOption("e", true, "A file that should be evaluated using the original mode's data");
         options.addOptionGroup(group);
@@ -65,6 +62,9 @@ public class StatisticalClassifierEvaluation {
             if (cmd.hasOption("o")) {
                 ensureFileExists(cmd.getOptionValue("o"));
             }
+            if (cmd.hasOption("p")) {
+                ensureDirectoryExists(cmd.getOptionValue("p"));
+            }
             if (cmd.hasOption("e")) {
                 ensureFileExists(cmd.getOptionValue("e"));
             }
@@ -78,49 +78,58 @@ public class StatisticalClassifierEvaluation {
 
     private static void ensureFileExists(String path) {
         File file = new File(path);
-        if (!file.exists()) {
+        if (!file.exists() || file.isDirectory()) {
             throw new IllegalArgumentException(String.format("The file \"%s\" does not exist.", file.getAbsolutePath()));
         }
     }
 
-    private static void processTestData() {
-        Log.i(TAG, "Testing classifier with equal data for " + NUM_TEST_KEYPRESSES + " keypresses");
-
-        Keypress[] keypresses = new Keypress[NUM_TEST_KEYPRESSES];
-        Random random = new Random();
-        float x = random.nextFloat() * 100;
-        float y = random.nextFloat() * 100;
-        float size = random.nextFloat();
-        float orientation = random.nextFloat() * 360;
-        float pressure = random.nextFloat();
-        float downDistance = random.nextFloat() * 10000;
-        float upDistance = random.nextFloat() * 10000;
-
-        float[] sensorX = new float[NUM_TEST_KEYPRESSES];
-        float[] sensorY = new float[NUM_TEST_KEYPRESSES];
-        float[] sensorZ = new float[NUM_TEST_KEYPRESSES];
-        for (int i = 0; i < NUM_TEST_KEYPRESSES; i++) {
-            sensorX[i] = random.nextFloat() * 100;
-            sensorY[i] = random.nextFloat() * 100;
-            sensorZ[i] = random.nextFloat() * 100;
-        }
-
-        for (int i = 0; i < NUM_TEST_KEYPRESSES; i++) {
-            keypresses[i] = new Keypress(x, y, size, orientation, pressure, downDistance, upDistance, BiometricsManager.SENSOR_TYPES.length);
-            for (int j = 0; j < BiometricsManager.SENSOR_TYPES.length; j++) {
-                keypresses[i].addSensorData(new float[] { sensorX[i], sensorY[i], sensorZ[i] });
-            }
-        }
-
-        for (int i = 0; i < NUM_TEST_TRIES; i++) {
-            double score = calcScore(i, i * 1000, 0, keypresses, sensorX.length, false);
-            if (score != BiometricsManager.SCORE_NOT_ENOUGH_DATA && score != 0) {
-                Log.e(TAG, String.format("Deviating score in try %d: %f != 0.0", i, score));
-            }
+    private static void ensureDirectoryExists(String path) {
+        File file = new File(path);
+        if (!file.exists() || file.isFile()) {
+            throw new IllegalArgumentException(String.format("The directory \"%s\" does not exist.", file.getAbsolutePath()));
         }
     }
 
-    private static void processCsvFile(String csvFile, boolean evaluationMode) {
+    private static void findOptimumParams(String csvFilePath) {
+        Log.i(TAG, "Finding optimum parameters, this might take a while");
+        StatisticalClassifierOptimizer optimizer = new StatisticalClassifierOptimizer(csvFilePath);
+
+        Log.i(TAG, "Optimizing distance function...");
+        int distance = optimizer.optimizeDistanceFunction();
+
+        Log.i(TAG, "Optimizing classification function...");
+        int classification = optimizer.optimizeClassificationFunction();
+
+        Log.i(TAG, "Optimizing acquisition set size...");
+        //int acquisitionSize = optimizer.optimizeAcquisitionSetSize();
+        int acquisitionSize = -1;
+
+        Log.i(TAG, "Optimizing template selection function...");
+        int template = optimizer.optimizeTemplateSelectionFunction();
+
+        Log.i(TAG, "Optimizing template set size...");
+        int templateSize = -1;
+        if (EvaluationParams.templateSelectionFunction > 0) {
+            templateSize = optimizer.optimizeTemplateSetSize();
+        } else {
+            Log.i(TAG, "Skipping optimization because no selection is applied");
+        }
+
+        Log.i(TAG, "Optimizing feature set...");
+        Set<String> sensors = optimizer.optimizeSensorSet();
+
+        StringBuilder sb = new StringBuilder(7);
+        sb.append("---- RESULTS ----");
+        sb.append(String.format("\n\tdistance = %d (%s)", distance, EvaluationParams.distanceFunctionToString(distance)));
+        sb.append(String.format("\n\tclassification = %d (%s", classification, EvaluationParams.classificationFunctionToString(classification)));
+        sb.append(String.format("\n\tacquisitionSize = %d", acquisitionSize));
+        sb.append(String.format("\n\ttemplate = %d (%s)", template, EvaluationParams.templateSelectionFunctionToString(template)));
+        sb.append(String.format("\n\ttemplateSize = %d", templateSize));
+        sb.append(String.format("\n\tsensorSet = %s", sensors));
+        Log.i(TAG, sb.toString());
+    }
+
+    static void processCsvFile(String csvFile, boolean evaluationMode, ScoreListener listener) {
         CSVReader reader = null;
         try {
             reader = new CSVReader(new BufferedReader(new FileReader(csvFile)), CsvUtils.COMMA, CsvUtils.QUOTE);
@@ -139,7 +148,7 @@ public class StatisticalClassifierEvaluation {
                 }
                 if (reader.getRecordsRead() > 1) {
                     Log.i(TAG, String.format("Processing entry %d", reader.getRecordsRead()));
-                    processLine(line, evaluationMode);
+                    processLine(line, evaluationMode, listener);
                 } else {
                     Log.i(TAG, "Creating column index mapping");
                     for (int i = 0; i < line.length; i++) {
@@ -150,12 +159,12 @@ public class StatisticalClassifierEvaluation {
             }
 
             reader.close();
-        } catch (IOException e) {
+        } catch (IOException | NullPointerException e) {
             e.printStackTrace();
         }
     }
 
-    private static void processLine(String[] line, boolean evaluationMode) {
+    private static void processLine(String[] line, boolean evaluationMode, ScoreListener listener) {
         int id = toInt(line[columnMapping.get(StatisticalClassifierContract.StatisticalClassifierData._ID)]);
         long timestamp = toLong(line[columnMapping.get(StatisticalClassifierContract.CaptureClassifierData.COLUMN_TIMESTAMP)]);
         int screenOrientation = toInt(line[columnMapping.get(StatisticalClassifierContract.StatisticalClassifierData.COLUMN_SCREEN_ORIENTATION)]);
@@ -176,24 +185,21 @@ public class StatisticalClassifierEvaluation {
         String[] sizes = entryPattern.split(line[columnMapping.get(StatisticalClassifierContract.StatisticalClassifierData.COLUMN_SIZE)]);
         String[] orientations = entryPattern.split(line[columnMapping.get(StatisticalClassifierContract.StatisticalClassifierData.COLUMN_ORIENTATION)]);
         String[] pressures = entryPattern.split(line[columnMapping.get(StatisticalClassifierContract.StatisticalClassifierData.COLUMN_PRESSURE)]);
-        String[][] sensors;
-        if (key.length == 0) {
-            sensors = new String[line.length - NUM_STATIC_COLUMNS][0];
-        } else {
-            sensors = new String[line.length - NUM_STATIC_COLUMNS - 3][0];
-        }
 
-        int sensorIndex = 0;
+        List<String[]> sensors = new ArrayList<>(line.length - NUM_STATIC_COLUMNS);
         for (String sensor : BiometricsManager.SENSOR_TYPES) {
-            if (columnMapping.containsKey(sensor)) {
-                sensors[sensorIndex] = entryPattern.split(line[columnMapping.get(sensor)]);
+            if (EvaluationParams.usedSensors.contains(sensor) && columnMapping.containsKey(sensor)) {
+                sensors.add(entryPattern.split(line[columnMapping.get(sensor)]));
             }
-            sensorIndex++;
         }
 
         Log.i(TAG, String.format("Processing study id %d", id));
+        if (upDistances.length != NUM_EVALUATION_KEYPRESSES || downDistances.length != upDistances.length - 1) {
+            Log.e(TAG, String.format("ID %d: Invalid number of keypresses, skipping try", id));
+            return;
+        }
         if (upDistances.length != positions.length || positions.length != sizes.length || sizes.length != orientations.length
-                || orientations.length != pressures.length || downDistances.length != upDistances.length - 1) {
+                || orientations.length != pressures.length) {
             Log.e(TAG, String.format("ID %d: Unequal number of data points, skipping try", id));
             return;
         }
@@ -209,7 +215,7 @@ public class StatisticalClassifierEvaluation {
             float size = toFloat(sizes[i]);
             float orientation = toFloat(orientations[i]);
             float pressure = toFloat(pressures[i]);
-            keypresses[i] = new Keypress(position[0], position[1], size, orientation, pressure, downDistance, upDistance, sensors.length);
+            keypresses[i] = new Keypress(position[0], position[1], size, orientation, pressure, downDistance, upDistance, sensors.size());
 
             if (i > 0) {
                 for (String[] sensor : sensors) {
@@ -224,10 +230,13 @@ public class StatisticalClassifierEvaluation {
         }
 
         // Add zero sensor data to first keypress, because no absolute value is available from reports
-        for (int i = 0; i < sensors.length; i++) {
+        for (int i = 0; i < sensors.size(); i++) {
             keypresses[0].addSensorData(new float[keypresses[1].getSensorData().get(i).length]);
         }
-        calcScore(id, timestamp, screenOrientation, keypresses, sensors.length, evaluationMode);
+        double score = calcScore(id, timestamp, screenOrientation, keypresses, sensors.size(), evaluationMode);
+        if (listener != null) {
+            listener.onScoreCalculated(score);
+        }
     }
 
     private static double calcScore(int tryId, long timestamp, int screenOrientation, Keypress[] keypresses, int sensorCount, boolean evaluationMode) {
