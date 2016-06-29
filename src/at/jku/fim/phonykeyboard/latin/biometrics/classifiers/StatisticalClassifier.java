@@ -218,6 +218,16 @@ public class StatisticalClassifier extends Classifier {
             int row = 0;
             while (c.next()) {
                 String[] rowValues = CsvUtils.split(c.getString(columnIndex));
+                if (rowValues.length == 1 && rowValues[0].isEmpty()) {
+                    if (row == 0) {
+                        return;    // Skip empty features (e.g. unavailable sensors)
+                    } else {
+                        Log.e(TAG, String.format("BUG: Template %d has no data for column %d", row, columnIndex));
+                        values[row] = new double[values[row-1].length][0];
+                        continue;
+                    }
+                }
+
                 values[row] = new double[rowValues.length][0];
                 for (int col = 0; col < rowValues.length; col++) {
                     values[row][col] = stringsToDoubles(multiValueRegex.split(rowValues[col]));
@@ -290,12 +300,7 @@ public class StatisticalClassifier extends Classifier {
     private double[] stringsToDoubles(String[] strings) {
         double[] doubles = new double[strings.length];
         for (int i = 0; i < strings.length; i++) {
-            // NOTE: This is a fix for empty sensor values that seem to only occur in evaluation
-            if (!strings[i].isEmpty()) {
-                doubles[i] = Double.valueOf(strings[i]);
-            } else {
-                doubles[i] = 0;
-            }
+            doubles[i] = Double.valueOf(strings[i]);
         }
         return doubles;
     }
@@ -453,22 +458,20 @@ public class StatisticalClassifier extends Classifier {
     private double calcAuthentication() {
         double result = Double.NaN;
         if (acquisitions.get(0).length > 0) {
-            for (int delta = 0; delta < acquisitions.size(); delta++) {
-                switch (EvaluationParams.classificationFunction) {
-                    case 0:
-                        result = minAuthentication();
-                        break;
-                    case 1:
-                        result = maxAuthentication();
-                        break;
-                    case 3:
-                        result = tempAuthentication();
-                        break;
-                    case 2:
-                    default:
-                        result = meanAuthentication();
-                        break;
-                }
+            switch (EvaluationParams.classificationFunction) {
+                case 0:
+                    result = minAuthentication();
+                    break;
+                case 1:
+                    result = maxAuthentication();
+                    break;
+                case 3:
+                    result = tempAuthentication();
+                    break;
+                case 2:
+                default:
+                    result = meanAuthentication();
+                    break;
             }
         }
         return result;
@@ -476,6 +479,7 @@ public class StatisticalClassifier extends Classifier {
 
     private double minAuthentication() {
         double min = 0;
+        int skippedFeatures = 0;
         for (int delta = 0; delta < currentData.size(); delta++) {
             double minDist = Double.POSITIVE_INFINITY;
             int E = acquisitions.get(delta).length;
@@ -484,17 +488,24 @@ public class StatisticalClassifier extends Classifier {
                     return Double.NaN;
                 }
 
-                double[][] sample = new double[currentData.get(delta).size()][currentData.get(delta).get(0).length];
-                minDist = Math.min(minDist, getDistance(acquisitions.get(delta)[e], currentData.get(delta).toArray(sample)));  // MIN(D[f(e), f(u)])
+                if (currentData.get(delta).size() > 0) {
+                    double[][] sample = new double[currentData.get(delta).size()][currentData.get(delta).get(0).length];
+                    minDist = Math.min(minDist, getDistance(acquisitions.get(delta)[e], currentData.get(delta).toArray(sample)));  // MIN(D[f(e), f(u)])
+                }
             }
-            min += variability[delta] == 0 ? 0 : (minDist / variability[delta]);
+            if (!Double.isNaN(variability[delta])) {
+                min += variability[delta] == 0 ? 0 : (minDist / variability[delta]);
+            } else {
+                skippedFeatures++;
+            }
         }
-        min /= currentData.size();   // 1/δ
+        min /= currentData.size() - skippedFeatures;   // 1/δ
         return min;
     }
 
     private double maxAuthentication() {
         double max = 0;
+        int skippedFeatures = 0;
         for (int delta = 0; delta < currentData.size(); delta++) {
             double maxDist = Double.NEGATIVE_INFINITY;
             int E = acquisitions.get(delta).length;
@@ -503,17 +514,24 @@ public class StatisticalClassifier extends Classifier {
                     return Double.NaN;
                 }
 
-                double[][] sample = new double[currentData.get(delta).size()][currentData.get(delta).get(0).length];
-                maxDist = Math.max(maxDist, getDistance(acquisitions.get(delta)[e], currentData.get(delta).toArray(sample)));  // MAX(D[f(e), f(u)])
+                if (currentData.get(delta).size() > 0) {
+                    double[][] sample = new double[currentData.get(delta).size()][currentData.get(delta).get(0).length];
+                    maxDist = Math.max(maxDist, getDistance(acquisitions.get(delta)[e], currentData.get(delta).toArray(sample)));  // MAX(D[f(e), f(u)])
+                }
             }
-            max += variability[delta] == 0 ? 0 : (maxDist / variability[delta]);
+            if (!Double.isNaN(variability[delta])) {
+                max += variability[delta] == 0 ? 0 : (maxDist / variability[delta]);
+            } else {
+                skippedFeatures++;
+            }
         }
-        max /= currentData.size();   // 1/δ
+        max /= currentData.size() - skippedFeatures;   // 1/δ
         return max;
     }
 
     private double meanAuthentication() {
         double mean = 0;
+        int skippedFeatures = 0;
         for (int delta = 0; delta < currentData.size(); delta++) {
             double meanDist = 0;
             int E = acquisitions.get(delta).length;
@@ -522,28 +540,42 @@ public class StatisticalClassifier extends Classifier {
                     return Double.NaN;
                 }
 
-                double[][] sample = new double[currentData.get(delta).size()][currentData.get(delta).get(0).length];
-                meanDist += getDistance(acquisitions.get(delta)[e], currentData.get(delta).toArray(sample));  // D[f(e), f(u)]
+                if (currentData.get(delta).size() > 0) {
+                    double[][] sample = new double[currentData.get(delta).size()][currentData.get(delta).get(0).length];
+                    meanDist += getDistance(acquisitions.get(delta)[e], currentData.get(delta).toArray(sample));  // D[f(e), f(u)]
+                }
             }
-            mean += variability[delta] == 0 ? 0 : (meanDist / variability[delta]);
+            if (!Double.isNaN(variability[delta])) {
+                mean += variability[delta] == 0 ? 0 : (meanDist / variability[delta]);
+            } else {
+                skippedFeatures++;
+            }
         }
-        mean /= currentData.size();   // 1/δ
+        mean /= currentData.size() - skippedFeatures;   // 1/δ
         return mean;
     }
 
     private double tempAuthentication() {
         double temp = 0;
+        int skippedFeatures = 0;
         for (int delta = 0; delta < currentData.size(); delta++) {
             int tu = findTemplateDynamics(delta);
             if (!ensureEqualSampleCount(delta, tu)) {
                 return Double.NaN;
             }
 
-            double[][] sample = new double[currentData.get(delta).size()][currentData.get(delta).get(0).length];
-            double tempDist = getDistance(acquisitions.get(delta)[tu], currentData.get(delta).toArray(sample));
-            temp += variability[delta] == 0 ? 0 : (tempDist / variability[delta]);
+            if (currentData.get(delta).size() > 0) {
+                double[][] sample = new double[currentData.get(delta).size()][currentData.get(delta).get(0).length];
+                double tempDist = getDistance(acquisitions.get(delta)[tu], currentData.get(delta).toArray(sample));
+
+                if (!Double.isNaN(variability[delta])) {
+                    temp += variability[delta] == 0 ? 0 : (tempDist / variability[delta]);
+                } else {
+                    skippedFeatures++;
+                }
+            }
         }
-        temp /= currentData.size();   // 1/δ
+        temp /= currentData.size() - skippedFeatures;   // 1/δ
         return temp;
     }
 
