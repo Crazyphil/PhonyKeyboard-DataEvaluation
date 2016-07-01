@@ -1,12 +1,8 @@
 package at.jku.fim.phonykeyboard.latin.biometrics.data;
 
-import com.sun.rowset.CachedRowSetImpl;
-import org.sqlite.SQLiteConfig;
 
-import javax.sql.rowset.CachedRowSet;
 import java.io.File;
 import java.sql.*;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -307,8 +303,8 @@ public class BiometricsDbHelper {
     public int delete(String table, String whereClause, String[] whereArgs) throws SQLException {
         PreparedStatement statement = connection.prepareStatement("DELETE FROM " + table +
                 (whereClause != null && !whereClause.isEmpty() ? " WHERE " + whereClause : ""));
-        int i = 0;
         if (whereArgs != null) {
+            int i = 1;
             for (String arg : whereArgs) {
                 statement.setObject(i, arg);
                 i++;
