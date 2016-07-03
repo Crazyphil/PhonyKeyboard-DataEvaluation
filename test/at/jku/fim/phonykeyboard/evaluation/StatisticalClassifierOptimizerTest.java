@@ -19,7 +19,7 @@ public class StatisticalClassifierOptimizerTest {
      */
     @Before
     public void setUp() {
-        optimizer = new StatisticalClassifierOptimizer(".");
+        optimizer = new StatisticalClassifierOptimizer(".", false);
     }
 
     /**

@@ -31,7 +31,7 @@ public class StatisticalClassifierEvaluation {
         manager.init();
 
         if (cmd.hasOption("p")) {
-            findOptimumParams(cmd.getOptionValue("p"));
+            findOptimumParams(cmd.getOptionValue("p"), cmd.hasOption("s"));
         } else {
             if (cmd.hasOption("o")) {
                 processCsvFile(cmd.getOptionValue("o"), false, null);
@@ -50,6 +50,7 @@ public class StatisticalClassifierEvaluation {
         group.addOption(Option.builder("p").hasArg().type(String.class).desc("Parameter optimization mode, does magic").build());
         options.addOption("d", "Only output data to STDOUT instead of full log");
         options.addOption("e", true, "A file that should be evaluated using the original mode's data");
+        options.addOption("s", "Skip data of control group participants in optimization mode");
         options.addOptionGroup(group);
 
         CommandLineParser parser = new DefaultParser();
@@ -90,9 +91,9 @@ public class StatisticalClassifierEvaluation {
         }
     }
 
-    private static void findOptimumParams(String csvFilePath) {
+    private static void findOptimumParams(String csvFilePath, boolean skipControlGroup) {
         Log.i(TAG, "Finding optimum parameters, this might take a while");
-        StatisticalClassifierOptimizer optimizer = new StatisticalClassifierOptimizer(csvFilePath);
+        StatisticalClassifierOptimizer optimizer = new StatisticalClassifierOptimizer(csvFilePath, skipControlGroup);
 
         Log.i(TAG, "Optimizing distance function...");
         int distance = optimizer.optimizeDistanceFunction();

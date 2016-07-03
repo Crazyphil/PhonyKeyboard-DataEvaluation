@@ -20,9 +20,9 @@ class StatisticalClassifierOptimizer {
     private String csvFilePath;
     private String[] csvFiles;
 
-    StatisticalClassifierOptimizer(String csvFilePath) {
+    StatisticalClassifierOptimizer(String csvFilePath, boolean skipControlGroup) {
         this.csvFilePath = csvFilePath;
-        csvFiles = new File(csvFilePath).list((dir, name) -> name.endsWith(".csv") && !name.endsWith(".old.csv"));
+        csvFiles = new File(csvFilePath).list((dir, name) -> name.endsWith(".csv") && !name.endsWith(".old.csv") && (!skipControlGroup || !name.endsWith("cg.csv")));
     }
 
     int optimizeDistanceFunction() {
