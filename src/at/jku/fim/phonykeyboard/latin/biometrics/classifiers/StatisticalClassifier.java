@@ -28,9 +28,13 @@ public class StatisticalClassifier extends Classifier {
     private int screenOrientation;
     private List<double[][][]> acquisitions;  // feature<[row][sample][values]>
     private double[] variability; // Variability scores of each feature of the enrollment templates
+    private boolean templatesLocked = false;
+
     private boolean invalidData;
     private ActiveBiometricsEntries activeEntries = new ActiveBiometricsEntries();
     private List<List<double[]>> currentData;   // feature<sample<[values]>>
+    /** Set to the ID of the newly inserted template row, because reading occurs just before the insert **/
+    private int currentTemplateID;
 
     /** Set to true when the user clicked the Next, Previous or Enter button and therefore submitted the input to the app **/
     private boolean submittedInput;
@@ -98,6 +102,11 @@ public class StatisticalClassifier extends Classifier {
         Cursor c = null;
         try {
             if (EvaluationParams.enableTemplateSelection) {
+                c = manager.getDb().query(false, StatisticalClassifierContract.StatisticalClassifierTemplateStatus.TABLE_NAME, new String[] {StatisticalClassifierContract.StatisticalClassifierTemplateStatus._ID },
+                        StatisticalClassifierContract.StatisticalClassifierTemplateStatus.COLUMN_CONTEXT + " = ? AND " + StatisticalClassifierContract.StatisticalClassifierTemplateStatus.COLUMN_SCREEN_ORIENTATION + " = ?",
+                        new String[] { String.valueOf(manager.getBiometricsContext()), String.valueOf(screenOrientation) }, null, null, null, null);
+                templatesLocked = c.getCount() > 0;
+
                 c = manager.getDb().query(false, StatisticalClassifierContract.StatisticalClassifierData.TABLE_NAME,
                         columns.toArray(new String[columns.size()]),
                         StatisticalClassifierContract.StatisticalClassifierData.COLUMN_CONTEXT + " = ? AND " + StatisticalClassifierContract.StatisticalClassifierData.COLUMN_SCREEN_ORIENTATION + " = ? AND " + StatisticalClassifierContract.StatisticalClassifierData._ID + " IN (" +
@@ -273,7 +282,7 @@ public class StatisticalClassifier extends Classifier {
     }
 
     private void calcScore() {
-        if (acquisitions.get(0).length < EvaluationParams.acquisitionSetSize) {
+        if (!templatesLocked && acquisitions.get(0).length < EvaluationParams.acquisitionSetSize) {
             Log.i(TAG, "Template set too small (" + acquisitions.get(0).length + ") for authentication");
             score = BiometricsManager.SCORE_NOT_ENOUGH_DATA;
             calculatedScore = true;
@@ -614,16 +623,17 @@ public class StatisticalClassifier extends Classifier {
             e.printStackTrace();
         }
 
-        if (EvaluationParams.enableTemplateSelection && index > 0) {
+        if (EvaluationParams.enableTemplateSelection && !templatesLocked && index > 0) {
             try {
                 Cursor c = db.query(false, StatisticalClassifierContract.StatisticalClassifierTemplates.TABLE_NAME,
                         new String[] {StatisticalClassifierContract.StatisticalClassifierTemplates._ID, StatisticalClassifierContract.StatisticalClassifierTemplates.COLUMN_DATA_ID, StatisticalClassifierContract.StatisticalClassifierTemplates.COLUMN_SCORE },
                         StatisticalClassifierContract.StatisticalClassifierTemplates.COLUMN_CONTEXT + " = ? AND " + StatisticalClassifierContract.StatisticalClassifierTemplates.COLUMN_SCREEN_ORIENTATION + " = ?",
                         new String[] { String.valueOf(manager.getBiometricsContext()), String.valueOf(screenOrientation) }, null, null, StatisticalClassifierContract.StatisticalClassifierTemplates.COLUMN_SCORE, null);
-                if (c.getCount() < EvaluationParams.acquisitionSetSize) {
+                if (c.getCount() < EvaluationParams.acquisitionSetSize - 1) {
                     saveTemplate(index);
-                } else if (c.getCount() == EvaluationParams.acquisitionSetSize) {
-                    // TODO: select best templateSetSize templates from acquisition set
+                } else if (c.getCount() == EvaluationParams.acquisitionSetSize - 1) {
+                    currentTemplateID = saveTemplate(index);
+                    selectTemplates(c);
                 }
             } catch (SQLException e) {
                 e.printStackTrace();
@@ -631,7 +641,95 @@ public class StatisticalClassifier extends Classifier {
         }
     }
 
-    private void saveTemplate(int dbId) {
+    // ---- BEGIN TEMPLATE SELECTION ----
+    private void selectTemplates(Cursor c) {
+        switch (EvaluationParams.templateSelectionFunction) {
+            case 1:
+                mdistSelect(c, true);
+                break;
+            case 2:
+                mdistSelect(c, false);
+                break;
+            case 0:
+            default:
+                return;
+        }
+    }
+
+    private void mdistSelect(Cursor c, boolean minSelect) {
+        double[] distances = new double[acquisitions.get(0).length+1];
+        for (int delta = 0; delta < acquisitions.size(); delta++) {
+            for (int i = 0; i < distances.length; i++) {
+                for (int j = 0; j < distances.length; j++) {
+                    if (i == j) continue;
+                    if (i == distances.length - 1) {
+                        double[][] sample = new double[currentData.get(delta).size()][currentData.get(delta).get(0).length];
+                        distances[i] += getDistance(currentData.get(delta).toArray(sample), acquisitions.get(delta)[j]);
+                    } else {
+                        if (j == distances.length - 1) {
+                            double[][] sample = new double[currentData.get(delta).size()][currentData.get(delta).get(0).length];
+                            distances[i] += getDistance(acquisitions.get(delta)[i], currentData.get(delta).toArray(sample));
+                        } else {
+                            distances[i] += getDistance(acquisitions.get(delta)[i], acquisitions.get(delta)[j]);
+                        }
+                    }
+                }
+            }
+        }
+
+        int[] templates = new int[EvaluationParams.templateSetSize];
+        for (int i = 0; i < templates.length; i++) {
+            double dist = minSelect ? Double.POSITIVE_INFINITY : Double.NEGATIVE_INFINITY;
+            for (int j = 0; j < distances.length; j++) {
+                if ((minSelect && distances[j] < dist) || (!minSelect && distances[j] > dist)) {
+                    dist = distances[j];
+                    templates[i] = j;
+                }
+            }
+            distances[templates[i]] = Double.NaN;
+        }
+        lockTemplates(c, templates);
+    }
+
+    private void lockTemplates(Cursor c, int[] templates) {
+        BiometricsDbHelper db = manager.getDb();
+        String[] values = new String[templates.length];
+        StringBuilder sb = new StringBuilder(templates.length * 2 - 1);
+        for (int i = 0; i < templates.length; i++) {
+            if (sb.length() > 0) {
+                sb.append(" AND ");
+            }
+            sb.append(StatisticalClassifierContract.StatisticalClassifierTemplates._ID + " != ?");
+
+            if (c.getCount() <= templates[i]) {
+                values[i] = String.valueOf(currentTemplateID);
+                continue;
+            }
+
+            c.beforeFirst();
+            for (int j = 0; j <= templates[i]; j++) {
+                c.next();
+            }
+            try {
+                values[i] = String.valueOf(c.getInt(c.getColumnIndex(StatisticalClassifierContract.StatisticalClassifierTemplates._ID)));
+            } catch (SQLException e) {
+                throw new IllegalArgumentException("Row ID not found in Cursor data", e);
+            }
+        }
+        try {
+            db.delete(StatisticalClassifierContract.StatisticalClassifierTemplates.TABLE_NAME, sb.toString(), values);
+
+            BiometricsDbHelper.ContentValues dbValues = new BiometricsDbHelper.ContentValues(2);
+            dbValues.put(StatisticalClassifierContract.StatisticalClassifierTemplateStatus.COLUMN_CONTEXT, manager.getBiometricsContext());
+            dbValues.put(StatisticalClassifierContract.StatisticalClassifierTemplateStatus.COLUMN_SCREEN_ORIENTATION, screenOrientation);
+            db.insert(StatisticalClassifierContract.StatisticalClassifierTemplateStatus.TABLE_NAME, dbValues);
+        } catch (SQLException e) {
+            Log.e(TAG, "Couldn't lock templates: " + e.getMessage());
+        }
+    }
+    // ---- END TEMPLATE SELECTION ----
+
+    private int saveTemplate(int dbId) {
         BiometricsDbHelper db = manager.getDb();
         BiometricsDbHelper.ContentValues values = new BiometricsDbHelper.ContentValues(4);
         values.put(StatisticalClassifierContract.StatisticalClassifierTemplates.COLUMN_CONTEXT, manager.getBiometricsContext());
@@ -639,10 +737,11 @@ public class StatisticalClassifier extends Classifier {
         values.put(StatisticalClassifierContract.StatisticalClassifierTemplates.COLUMN_DATA_ID, dbId);
         values.put(StatisticalClassifierContract.StatisticalClassifierTemplates.COLUMN_SCORE, score);
         try {
-            db.insert(StatisticalClassifierContract.StatisticalClassifierTemplates.TABLE_NAME, values);
+            return db.insert(StatisticalClassifierContract.StatisticalClassifierTemplates.TABLE_NAME, values);
         } catch (SQLException e) {
             e.printStackTrace();
         }
+        return -1;
     }
 
     @Override
@@ -652,6 +751,7 @@ public class StatisticalClassifier extends Classifier {
             db.delete(StatisticalClassifierContract.StatisticalClassifierData.TABLE_NAME, null, null);
             if (EvaluationParams.enableTemplateSelection) {
                 db.delete(StatisticalClassifierContract.StatisticalClassifierTemplates.TABLE_NAME, null, null);
+                db.delete(StatisticalClassifierContract.StatisticalClassifierTemplateStatus.TABLE_NAME, null, null);
             }
         } catch (SQLException e) {
             return false;

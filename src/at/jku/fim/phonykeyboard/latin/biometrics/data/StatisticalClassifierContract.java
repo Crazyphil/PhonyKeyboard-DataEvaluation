@@ -6,7 +6,7 @@ import java.sql.Statement;
 import java.sql.Struct;
 
 public class StatisticalClassifierContract extends Contract {
-    public static final int DATABASE_VERSION = 2;
+    public static final int DATABASE_VERSION = 3;
 
     private final String sqlCreateData;
 
@@ -16,6 +16,11 @@ public class StatisticalClassifierContract extends Contract {
             StatisticalClassifierTemplates.COLUMN_SCREEN_ORIENTATION + " INTEGER, " +
             StatisticalClassifierTemplates.COLUMN_DATA_ID + " INTEGER, " +
             StatisticalClassifierTemplates.COLUMN_SCORE + " REAL)";
+
+    private final String SQL_CREATE_TEMPLATE_STATUS = "CREATE TABLE " + StatisticalClassifierTemplateStatus.TABLE_NAME + " (" +
+            StatisticalClassifierTemplateStatus._ID + " INTEGER PRIMARY KEY, " +
+            StatisticalClassifierTemplateStatus.COLUMN_CONTEXT + " INTEGER, " +
+            StatisticalClassifierTemplateStatus.COLUMN_SCREEN_ORIENTATION + " INTEGER)";
 
     private String[] sensorColumns;
 
@@ -53,6 +58,7 @@ public class StatisticalClassifierContract extends Contract {
             Statement statement = db.createStatement();
             statement.execute(sqlCreateData);
             statement.execute(SQL_CREATE_TEMPLATES);
+            statement.execute(SQL_CREATE_TEMPLATE_STATUS);
             statement.close();
         } catch (SQLException e) {
             e.printStackTrace();
@@ -61,14 +67,19 @@ public class StatisticalClassifierContract extends Contract {
 
     @Override
     public void onUpgrade(Connection db, int oldVersion, int newVersion) {
-        if (oldVersion < 2) {
-            try {
+        try {
+            if (oldVersion < 2) {
                 Statement statement = db.createStatement();
                 statement.execute(SQL_CREATE_TEMPLATES);
                 statement.close();
-            } catch (SQLException e) {
-                e.printStackTrace();
             }
+            if (oldVersion < 3) {
+                Statement statement = db.createStatement();
+                statement.execute(SQL_CREATE_TEMPLATE_STATUS);
+                statement.close();
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
         }
     }
 
@@ -103,6 +114,13 @@ public class StatisticalClassifierContract extends Contract {
         public static final String COLUMN_SCREEN_ORIENTATION = "screen_orientation";
         public static final String COLUMN_DATA_ID = "data_id";
         public static final String COLUMN_SCORE = "score";
+    }
+
+    public static abstract class StatisticalClassifierTemplateStatus {
+        public static final String TABLE_NAME = "StatisticalClassifierTemplateStatus";
+        public static final String _ID = "_id";
+        public static final String COLUMN_CONTEXT = "context";
+        public static final String COLUMN_SCREEN_ORIENTATION = "screen_orientation";
     }
 
     public static abstract class CaptureClassifierData {

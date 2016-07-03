@@ -5,7 +5,6 @@ import at.jku.fim.phonykeyboard.latin.biometrics.BiometricsManager;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.StringJoiner;
 
 public class EvaluationParams {
     /**
@@ -16,7 +15,7 @@ public class EvaluationParams {
     /**
      * Number of templates to use for authentication (after selection)
      */
-    public static int templateSetSize = 10;
+    public static int templateSetSize = 7;
 
     /**
      * Enables template selection
@@ -49,6 +48,10 @@ public class EvaluationParams {
 
     public static String templateSelectionFunctionToString(int templateSelectionFunction) {
         switch (templateSelectionFunction) {
+            case 1:
+                return "mdistMin";
+            case 2:
+                return "mdistMax";
             case 0:
             default:
                 return "none";
