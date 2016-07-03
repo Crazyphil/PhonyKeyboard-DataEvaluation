@@ -11,6 +11,8 @@ import at.jku.fim.phonykeyboard.latin.biometrics.BiometricsManagerImpl;
 import at.jku.fim.phonykeyboard.latin.biometrics.data.*;
 import at.jku.fim.phonykeyboard.latin.utils.CsvUtils;
 import at.jku.fim.phonykeyboard.latin.utils.Log;
+import org.apache.commons.math3.ml.clustering.CentroidCluster;
+import org.apache.commons.math3.ml.clustering.FuzzyKMeansClusterer;
 import org.apache.commons.math3.ml.distance.DistanceMeasure;
 import org.apache.commons.math3.ml.distance.EuclideanDistance;
 import org.apache.commons.math3.ml.distance.ManhattanDistance;
@@ -628,12 +630,23 @@ public class StatisticalClassifier extends Classifier {
 
     // ---- BEGIN TEMPLATE SELECTION ----
     private void selectTemplates(Cursor c) {
+        if (EvaluationParams.templateSetSize == EvaluationParams.acquisitionSetSize) return;
+
         switch (EvaluationParams.templateSelectionFunction) {
             case 1:
                 mdistSelect(c, true);
                 break;
             case 2:
                 mdistSelect(c, false);
+                break;
+            case 3:
+                // TODO: Implement GMMS selection
+                break;
+            case 4:
+                // TODO: Implement DEND selection
+                break;
+            case 5:
+                fuzzyCMeansSelect(c);
                 break;
             case 0:
             default:
@@ -672,6 +685,39 @@ public class StatisticalClassifier extends Classifier {
                 }
             }
             distances[templates[i]] = Double.NaN;
+        }
+        lockTemplates(c, templates);
+    }
+
+    private void fuzzyCMeansSelect(Cursor c) {
+        List<ClusterPoint> points = new ArrayList<>(acquisitions.get(0).length+1);
+        for (int delta = 0; delta < acquisitions.size(); delta++) {
+            for (int i = 0; i < acquisitions.get(delta).length; i++) {
+                if (delta == 0) {
+                    points.add(new ClusterPoint());
+                }
+                points.get(i).addSamples(acquisitions.get(delta)[i]);
+            }
+            if (delta == 0) {
+                points.add(new ClusterPoint());
+            }
+            points.get(points.size()-1).addSamples(currentData.get(delta));
+        }
+
+        FuzzyKMeansClusterer<ClusterPoint> clusterer = new FuzzyKMeansClusterer<>(EvaluationParams.templateSetSize, 2, -1,
+                EvaluationParams.distanceFunction == 0 ? new ManhattanDistance() : new EuclideanDistance());
+        List<CentroidCluster<ClusterPoint>> clusters = clusterer.cluster(points);
+
+        int[] templates = new int[clusters.size()];
+        for (int i = 0; i < templates.length; i++) {
+            double minDist = Double.POSITIVE_INFINITY;
+            for (ClusterPoint point : clusters.get(i).getPoints()) {
+                double dist = point.distanceTo(clusterer.getDistanceMeasure(), clusters.get(i).getCenter());
+                if (dist < minDist) {
+                    minDist = dist;
+                    templates[i] = points.indexOf(point);
+                }
+            }
         }
         lockTemplates(c, templates);
     }
