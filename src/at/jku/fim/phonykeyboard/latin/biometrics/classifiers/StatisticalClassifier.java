@@ -8,12 +8,12 @@ import at.jku.fim.phonykeyboard.evaluation.EvaluationParams;
 import at.jku.fim.phonykeyboard.latin.biometrics.BiometricsEntry;
 import at.jku.fim.phonykeyboard.latin.biometrics.BiometricsManager;
 import at.jku.fim.phonykeyboard.latin.biometrics.BiometricsManagerImpl;
-import at.jku.fim.phonykeyboard.latin.biometrics.data.BiometricsDbHelper;
-import at.jku.fim.phonykeyboard.latin.biometrics.data.Contract;
-import at.jku.fim.phonykeyboard.latin.biometrics.data.Cursor;
-import at.jku.fim.phonykeyboard.latin.biometrics.data.StatisticalClassifierContract;
+import at.jku.fim.phonykeyboard.latin.biometrics.data.*;
 import at.jku.fim.phonykeyboard.latin.utils.CsvUtils;
 import at.jku.fim.phonykeyboard.latin.utils.Log;
+import org.apache.commons.math3.ml.distance.DistanceMeasure;
+import org.apache.commons.math3.ml.distance.EuclideanDistance;
+import org.apache.commons.math3.ml.distance.ManhattanDistance;
 
 /**
  * This Classifier implements the statistical classifier proposed by Maiorana, et al. 2011, extended by further features.
@@ -256,17 +256,20 @@ public class StatisticalClassifier extends Classifier {
      */
     private double getDistance(double[][] f1, double[][] f2) {
         double distance = 0;
+        DistanceMeasure measure;
+        switch (EvaluationParams.distanceFunction) {
+            case 1:
+                measure = new EuclideanDistance();
+                break;
+            default:
+            case 0:
+                measure = new ManhattanDistance();
+                break;
+        }
+
         // Calculate distance for all features
         for (int k = 0; k < f1.length; k++) {
-            switch (EvaluationParams.distanceFunction) {
-                case 1:
-                    distance += euclideanDistance(f1[k], f2[k]);
-                    break;
-                case 0:
-                default:
-                    distance += manhattanDistance(f1[k], f2[k]);
-                    break;
-            }
+            distance += measure.compute(f1[k], f2[k]);
         }
         distance /= f1.length;
         return distance;
@@ -313,24 +316,6 @@ public class StatisticalClassifier extends Classifier {
         }
         return doubles;
     }
-
-    // ---- BEGIN DISTANCE METRICS ----
-    private double manhattanDistance(double[] f1, double[] f2) {
-        double result = 0;
-        for (int i = 0; i < f1.length; i++) {
-            result += Math.abs(f1[i] - f2[i]);
-        }
-        return result;
-    }
-
-    private double euclideanDistance(double[] f1, double[] f2) {
-        double result = 0;
-        for (int i = 0; i < f1.length; i++) {
-            result += Math.pow(f1[i] - f2[i], 2);
-        }
-        return result;
-    }
-    // ---- END DISTANCE METRICS ----
 
     // ---- BEGIN VARIABILITY METRICS ----
     private void calcVariability() {
