@@ -61,7 +61,7 @@ class StatisticalClassifierOptimizer {
 
     int optimizeAcquisitionSetSize() {
         int currentSize = EvaluationParams.acquisitionSetSize;
-        int bestSize = optimizeFunction(MAX_ACQUISITION_SET_SIZE, new ParameterProxy<Integer>() {
+        int bestSize = optimizeSetSize(MAX_ACQUISITION_SET_SIZE, new ParameterProxy<Integer>() {
             @Override
             public Integer get() {
                 return EvaluationParams.acquisitionSetSize;
@@ -95,7 +95,7 @@ class StatisticalClassifierOptimizer {
 
     int optimizeTemplateSetSize() {
         int currentSize = EvaluationParams.templateSetSize;
-        int bestSize = optimizeFunction(EvaluationParams.acquisitionSetSize, new ParameterProxy<Integer>() {
+        int bestSize = optimizeSetSize(EvaluationParams.acquisitionSetSize, new ParameterProxy<Integer>() {
             @Override
             public Integer get() {
                 return EvaluationParams.templateSetSize;
@@ -128,21 +128,29 @@ class StatisticalClassifierOptimizer {
     }
 
     private int optimizeFunction(int maxValue, ParameterProxy<Integer> proxy) {
+        return optimizeInt(0, maxValue, proxy);
+    }
+
+    private int optimizeSetSize(int maxValue, ParameterProxy<Integer> proxy) {
+        return optimizeInt(1, maxValue, proxy);
+    }
+
+    private int optimizeInt(int minValue, int maxValue, ParameterProxy<Integer> proxy) {
         double minEER = Double.POSITIVE_INFINITY;
-        int bestFunction = 0;
-        for (int function = 0; function <= maxValue; function++) {
+        int bestInt = 0;
+        for (int i = minValue; i <= maxValue; i++) {
             System.out.print(" ");
-            System.out.print(function);
-            proxy.set(function);
+            System.out.print(i);
+            proxy.set(i);
             double eer = processFiles();
             if (eer < minEER) {
                 minEER = eer;
-                bestFunction = function;
+                bestInt = i;
             }
         }
         System.out.println();
         Log.i(TAG, String.format("Best EER: %.4f %%", minEER * 100));
-        return bestFunction;
+        return bestInt;
     }
 
     private <T> Set<T> optimizeSet(Set<T> setItems, ParameterProxy<Set<T>> proxy) {

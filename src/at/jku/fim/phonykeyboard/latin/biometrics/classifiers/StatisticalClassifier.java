@@ -630,7 +630,7 @@ public class StatisticalClassifier extends Classifier {
 
     // ---- BEGIN TEMPLATE SELECTION ----
     private void selectTemplates(Cursor c) {
-        if (EvaluationParams.templateSetSize == EvaluationParams.acquisitionSetSize) return;
+        if (EvaluationParams.acquisitionSetSize < 2 || EvaluationParams.templateSetSize == EvaluationParams.acquisitionSetSize) return;
 
         switch (EvaluationParams.templateSelectionFunction) {
             case 1:
@@ -654,9 +654,16 @@ public class StatisticalClassifier extends Classifier {
         }
     }
 
+    /**
+     * Implementation of the MDIST algorithm in Uludag et. al. 2004
+     * @param minSelect Whether to select templates with minimum or maximum distance
+     */
     private void mdistSelect(Cursor c, boolean minSelect) {
+        // Step 1: Find the pair-wise distance score between the N impressions.
         double[] distances = new double[acquisitions.get(0).length+1];
         for (int delta = 0; delta < acquisitions.size(); delta++) {
+            if (acquisitions.get(delta)[0].length == 0) continue;   // Skip empty features (e.g. unavailable sensors)
+
             for (int i = 0; i < distances.length; i++) {
                 for (int j = 0; j < distances.length; j++) {
                     if (i == j) continue;
@@ -675,6 +682,12 @@ public class StatisticalClassifier extends Classifier {
             }
         }
 
+        // Step 2: For the jth impression, compute its average distance score, dj, with respect to the other (N-1) impressions.
+        for (int i = 0; i < distances.length; i++) {
+            distances[i] /= distances.length - 1;
+        }
+
+        // Step 3: Choose K impressions that have the smallest average distance scores. These constitute the template set T.
         int[] templates = new int[EvaluationParams.templateSetSize];
         for (int i = 0; i < templates.length; i++) {
             double dist = minSelect ? Double.POSITIVE_INFINITY : Double.NEGATIVE_INFINITY;

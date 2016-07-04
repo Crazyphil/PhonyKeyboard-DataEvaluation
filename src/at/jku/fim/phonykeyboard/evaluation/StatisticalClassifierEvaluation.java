@@ -102,8 +102,7 @@ public class StatisticalClassifierEvaluation {
         int classification = optimizer.optimizeClassificationFunction();
 
         Log.i(TAG, "Optimizing acquisition set size...");
-        //int acquisitionSize = optimizer.optimizeAcquisitionSetSize();
-        int acquisitionSize = -1;
+        int acquisitionSize = optimizer.optimizeAcquisitionSetSize();
 
         Log.i(TAG, "Optimizing template selection function...");
         int template = optimizer.optimizeTemplateSelectionFunction();
