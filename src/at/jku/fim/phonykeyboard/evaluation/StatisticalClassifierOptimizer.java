@@ -110,6 +110,35 @@ class StatisticalClassifierOptimizer {
         return bestSize;
     }
 
+    int[] optimizeTemplate() {
+        int currentSize = EvaluationParams.templateSetSize;
+        int currentFunction = EvaluationParams.templateSelectionFunction;
+        int[] best = optimizeInts(0, MAX_TEMPLATE_SELECTION_FUNCTION, 2, EvaluationParams.acquisitionSetSize, new ParameterProxy<Integer>() {
+            @Override
+            public Integer get() {
+                return EvaluationParams.templateSelectionFunction;
+            }
+
+            @Override
+            public void set(Integer value) {
+                EvaluationParams.templateSelectionFunction = value;
+            }
+        }, new ParameterProxy<Integer>() {
+            @Override
+            public Integer get() {
+                return EvaluationParams.templateSetSize;
+            }
+
+            @Override
+            public void set(Integer value) {
+                EvaluationParams.templateSetSize = value;
+            }
+        });
+        EvaluationParams.templateSetSize = currentSize;
+        EvaluationParams.templateSelectionFunction = currentFunction;
+        return best;
+    }
+
     Set<String> optimizeSensorSet() {
         Set<String> sensorSet = new HashSet<>(BiometricsManager.SENSOR_TYPES.length);
         Collections.addAll(sensorSet, BiometricsManager.SENSOR_TYPES);
@@ -132,7 +161,7 @@ class StatisticalClassifierOptimizer {
     }
 
     private int optimizeSetSize(int maxValue, ParameterProxy<Integer> proxy) {
-        return optimizeInt(1, maxValue, proxy);
+        return optimizeInt(2, maxValue, proxy);
     }
 
     private int optimizeInt(int minValue, int maxValue, ParameterProxy<Integer> proxy) {
@@ -149,8 +178,34 @@ class StatisticalClassifierOptimizer {
             }
         }
         System.out.println();
-        Log.i(TAG, String.format("Best EER: %.4f %%", minEER * 100));
+        Log.i(TAG, String.format("Best EER with %d: %.4f %%", bestInt, minEER * 100));
         return bestInt;
+    }
+
+    private int[] optimizeInts(int min1, int max1, int min2, int max2, ParameterProxy<Integer> proxy1, ParameterProxy<Integer> proxy2) {
+        double minEER = Double.POSITIVE_INFINITY;
+        int[] bestInts = new int[2];
+        for (int i = min1; i <= max1; i++) {
+            System.out.print(" ");
+            System.out.print(i);
+            System.out.print("[");
+            proxy1.set(i);
+            for (int j = min2; j <= max2; j++) {
+                System.out.print(" ");
+                System.out.print(j);
+                proxy2.set(j);
+                double eer = processFiles();
+                if (eer < minEER) {
+                    minEER = eer;
+                    bestInts[0] = i;
+                    bestInts[1] = j;
+                }
+            }
+            System.out.print("]");
+        }
+        System.out.println();
+        Log.i(TAG, String.format("Best EER: %.4f %%", minEER * 100));
+        return bestInts;
     }
 
     private <T> Set<T> optimizeSet(Set<T> setItems, ParameterProxy<Set<T>> proxy) {

@@ -104,7 +104,7 @@ public class StatisticalClassifierEvaluation {
         Log.i(TAG, "Optimizing acquisition set size...");
         int acquisitionSize = optimizer.optimizeAcquisitionSetSize();
 
-        Log.i(TAG, "Optimizing template selection function...");
+       /* Log.i(TAG, "Optimizing template selection function...");
         int template = optimizer.optimizeTemplateSelectionFunction();
 
         Log.i(TAG, "Optimizing template set size...");
@@ -113,7 +113,10 @@ public class StatisticalClassifierEvaluation {
             templateSize = optimizer.optimizeTemplateSetSize();
         } else {
             Log.i(TAG, "Skipping optimization because no selection is applied");
-        }
+        }*/
+
+        Log.i(TAG, "Optimizing template size for template selection function...");
+        int[] templates = optimizer.optimizeTemplate();
 
         Log.i(TAG, "Optimizing feature set...");
         Set<String> sensors = optimizer.optimizeSensorSet();
@@ -123,8 +126,10 @@ public class StatisticalClassifierEvaluation {
         sb.append(String.format("\n\tdistance = %d (%s)", distance, EvaluationParams.distanceFunctionToString(distance)));
         sb.append(String.format("\n\tclassification = %d (%s", classification, EvaluationParams.classificationFunctionToString(classification)));
         sb.append(String.format("\n\tacquisitionSize = %d", acquisitionSize));
-        sb.append(String.format("\n\ttemplate = %d (%s)", template, EvaluationParams.templateSelectionFunctionToString(template)));
-        sb.append(String.format("\n\ttemplateSize = %d", templateSize));
+        //sb.append(String.format("\n\ttemplate = %d (%s)", template, EvaluationParams.templateSelectionFunctionToString(template)));
+        sb.append(String.format("\n\ttemplate = %d (%s)", templates[0], EvaluationParams.templateSelectionFunctionToString(templates[0])));
+        //sb.append(String.format("\n\ttemplateSize = %d", templateSize));
+        sb.append(String.format("\n\ttemplateSize = %d", templates[1]));
         sb.append(String.format("\n\tsensorSet = %s", sensors));
         Log.i(TAG, sb.toString());
     }
