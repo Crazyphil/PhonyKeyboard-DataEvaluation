@@ -640,7 +640,7 @@ public class StatisticalClassifier extends Classifier {
                 mdistSelect(c, false);
                 break;
             case 3:
-                // TODO: Implement GMMS selection
+                gmmsSelect(c);
                 break;
             case 4:
                 // TODO: Implement DEND selection
@@ -700,6 +700,56 @@ public class StatisticalClassifier extends Classifier {
             distances[templates[i]] = Double.NaN;
         }
         lockTemplates(c, templates);
+    }
+
+    /**
+     * Implementation of the Greedy Maximum Match Scores algorithm in Li et. al. 2008
+     */
+    private void gmmsSelect(Cursor c) {
+        // Initialize N, K, S(N×N), Choose[K]
+        int N = acquisitions.get(0).length + 1, K = EvaluationParams.templateSetSize;
+        int[] Choose = new int[K];
+
+        double[][] S = new double[N][N];
+        for (int delta = 0; delta < acquisitions.size(); delta++) {
+            for (int i = 0; i < N-1; i++) {
+                for (int j = i+1; j < N-1; j++) {
+                    if (j == i) continue;
+                    S[i][j] += getDistance(acquisitions.get(delta)[i], acquisitions.get(delta)[j]);
+                    S[j][i] = S[i][j];
+                }
+
+                if (currentData.get(delta).size() > 0) {
+                    double[][] sample = new double[currentData.get(delta).size()][currentData.get(delta).get(0).length];
+                    S[i][S.length - 1] += getDistance(acquisitions.get(delta)[i], currentData.get(delta).toArray(sample));
+                    S[S.length - 1][i] = S[i][S.length - 1];
+                }
+            }
+        }
+
+        for (int i = 0; i < K; i++) {
+            // Find j* where sum(j*) >= sum(j); sum(j) = SUM(m=1, N, m!=j), j=1..N
+            int jStar = 0;
+            double maxSumJ = 0;
+            for (int j = 0; j < N; j++) {
+                double sumJ = 0;
+                for (int m = 0; m < N; m++) {
+                    if (m == j) continue;
+                    sumJ += S[j][m];
+                }
+                if (sumJ >= maxSumJ) {
+                    jStar = j;
+                    maxSumJ = sumJ;
+                }
+            }
+
+            Choose[i] = jStar;
+            for (int m = 0; m < N; m++) {
+                S[jStar][m] = 0;
+                S[m][jStar] = 0;
+            }
+        }
+        lockTemplates(c, Choose);
     }
 
     private void fuzzyCMeansSelect(Cursor c) {
