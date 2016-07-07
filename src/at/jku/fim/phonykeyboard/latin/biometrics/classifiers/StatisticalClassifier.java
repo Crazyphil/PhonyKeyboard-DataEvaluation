@@ -11,6 +11,10 @@ import at.jku.fim.phonykeyboard.latin.biometrics.BiometricsManagerImpl;
 import at.jku.fim.phonykeyboard.latin.biometrics.data.*;
 import at.jku.fim.phonykeyboard.latin.utils.CsvUtils;
 import at.jku.fim.phonykeyboard.latin.utils.Log;
+import com.apporiented.algorithm.clustering.Cluster;
+import com.apporiented.algorithm.clustering.ClusteringAlgorithm;
+import com.apporiented.algorithm.clustering.CompleteLinkageStrategy;
+import com.apporiented.algorithm.clustering.DefaultClusteringAlgorithm;
 import org.apache.commons.math3.ml.clustering.CentroidCluster;
 import org.apache.commons.math3.ml.clustering.FuzzyKMeansClusterer;
 import org.apache.commons.math3.ml.distance.DistanceMeasure;
@@ -643,7 +647,7 @@ public class StatisticalClassifier extends Classifier {
                 gmmsSelect(c);
                 break;
             case 4:
-                // TODO: Implement DEND selection
+                dendSelect(c);
                 break;
             case 5:
                 fuzzyCMeansSelect(c);
@@ -783,6 +787,138 @@ public class StatisticalClassifier extends Classifier {
             }
         }
         lockTemplates(c, templates);
+    }
+
+    private void dendSelect(Cursor c) {
+        // Step 1: Generate the N×N dissimilarity matrix M, where entry (i, j) (i, j∈{1..N}) is the distance score between impressions i and j
+        double[][] distances = new double[acquisitions.get(0).length+1][acquisitions.get(0).length+1];
+        for (int delta = 0; delta < acquisitions.size(); delta++) {
+            for (int i = 0; i < acquisitions.get(delta).length; i++) {
+                for (int j = i+1; j < acquisitions.get(delta).length; j++) {
+                    distances[i][j] += getDistance(acquisitions.get(delta)[i], acquisitions.get(delta)[j]);
+                    distances[j][i] = distances[i][j];
+                }
+
+                double[][] sample = new double[currentData.get(delta).size()][currentData.get(delta).get(0).length];
+                distances[i][distances.length-1] += getDistance(acquisitions.get(delta)[i], currentData.get(delta).toArray(sample));
+                distances[distances.length-1][i] = distances[i][distances.length-1];
+            }
+        }
+
+        String[] ids = new String[acquisitions.get(0).length+1];
+        c.beforeFirst();
+        for (int i = 0; i < acquisitions.get(0).length; i++) {
+            ids[i] = String.valueOf(i);
+        }
+        ids[ids.length-1] = String.valueOf(ids.length-1);
+
+        // Step 2: Apply the complete link clustering algorithm on M, and generate the dendrogram, D. Use the dendrogram D to identify K clusters
+        ClusteringAlgorithm algorithm = new DefaultClusteringAlgorithm();
+        Cluster cluster = algorithm.performClustering(distances, ids, new CompleteLinkageStrategy());
+
+        List<List<Cluster>> cut = new ArrayList<>(EvaluationParams.acquisitionSetSize / 2), singleItems = new ArrayList<>();
+        cut.add(new ArrayList<>(1));
+        cut.get(0).add(cluster);
+        singleItems.add(new ArrayList<>(0));
+        buildClusterMap(cluster, cut, 1, singleItems);
+
+        List<Cluster> clusters = null;
+        for (List<Cluster> level : cut) {
+            if (level.size() >= EvaluationParams.templateSetSize) {
+                clusters = level;
+                break;
+            }
+        }
+
+        /* Step 3: In each of the clusters identified in step 2, select an acquisition whose average distance from the rest of the acquisitions in
+           the cluster is minimum. If a cluster has only 2 acquisitions, choose any one of the two acquisitions at random */
+        int[] templates = new int[EvaluationParams.templateSetSize];
+        for (int i = 0; i < templates.length; i++) {
+            templates[i] = getDendTemplate(clusters.get(i), distances);
+        }
+        lockTemplates(c, templates);
+    }
+
+    private void buildClusterMap(Cluster dendrogram, List<List<Cluster>> cut, int level, List<List<Cluster>> singleItems) {
+        if (cut.size() - 1 < level || cut.get(level) == null) {
+            cut.add(level, new ArrayList<>());
+            singleItems.add(level, new ArrayList<>());
+        }
+        cut.get(level).addAll(dendrogram.getChildren());
+
+        for (Cluster child : dendrogram.getChildren()) {
+            if (child.isLeaf()) {
+                singleItems.get(level).add(child);
+            } else {
+                buildClusterMap(child, cut, level + 1, singleItems);
+            }
+        }
+
+        if (level == 1) {
+            for (int i = 1; i < cut.size(); i++) {
+                for (Cluster item : singleItems.get(i)) {
+levels:             for (int j = i + 1; j < cut.size(); j++) {
+                        if (cut.get(j).contains(item)) continue;
+                        for (int k = 0; k < cut.get(j).size(); k++) {
+                            Cluster other = cut.get(j).get(k);
+                            if (isInParent(item, other.getParent())) {
+                                cut.get(j).add(k, item);
+                                continue levels;
+                            }
+                        }
+                        cut.get(j).add(item);
+                    }
+                }
+            }
+        }
+    }
+
+    private boolean isInParent(Cluster cluster, Cluster other) {
+        if (other.getParent() == null) {
+            return false;
+        }
+        for (Cluster child : other.getParent().getChildren()) {
+            if (child.equals(cluster)) {
+                return true;
+            }
+        }
+        return isInParent(cluster, other.getParent());
+    }
+
+    private int getDendTemplate(Cluster cluster, double[][] distances) {
+        String index = "-1";
+        if (cluster.isLeaf()) {
+            index = cluster.getName();
+        } else if (cluster.countLeafs() == 2) {
+            index = cluster.getChildren().get((int)Math.round(Math.random())).getName();
+        } else {
+            List<Cluster> leafs = getLeafs(cluster);
+            double minDist = Double.POSITIVE_INFINITY;
+            for (int i = 0; i < leafs.size(); i++) {
+                int dist = 0;
+                for (Cluster leaf : leafs) {
+                    dist += distances[Integer.parseInt(leafs.get(i).getName())][Integer.parseInt(leaf.getName())];
+                }
+                dist /= leafs.size() - 1;
+                if (dist < minDist) {
+                    index = leafs.get(i).getName();
+                }
+            }
+
+        }
+        return Integer.parseInt(index);
+    }
+
+    private List<Cluster> getLeafs(Cluster cluster) {
+        List<Cluster> leafs = new ArrayList<>();
+        for (Cluster child : cluster.getChildren()) {
+            if (child.isLeaf()) {
+                leafs.add(child);
+            } else {
+                leafs.addAll(getLeafs(child));
+            }
+        }
+        return leafs;
     }
 
     private void lockTemplates(Cursor c, int[] templates) {
