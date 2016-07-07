@@ -124,7 +124,7 @@ public class StatisticalClassifierEvaluation {
         StringBuilder sb = new StringBuilder(7);
         sb.append("---- RESULTS ----");
         sb.append(String.format("\n\tdistance = %d (%s)", distance, EvaluationParams.distanceFunctionToString(distance)));
-        sb.append(String.format("\n\tclassification = %d (%s", classification, EvaluationParams.classificationFunctionToString(classification)));
+        sb.append(String.format("\n\tclassification = %d (%s)", classification, EvaluationParams.classificationFunctionToString(classification)));
         sb.append(String.format("\n\tacquisitionSize = %d", acquisitionSize));
         //sb.append(String.format("\n\ttemplate = %d (%s)", template, EvaluationParams.templateSelectionFunctionToString(template)));
         sb.append(String.format("\n\ttemplate = %d (%s)", templates[0], EvaluationParams.templateSelectionFunctionToString(templates[0])));

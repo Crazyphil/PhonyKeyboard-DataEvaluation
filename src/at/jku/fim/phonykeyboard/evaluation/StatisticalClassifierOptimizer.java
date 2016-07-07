@@ -178,7 +178,7 @@ class StatisticalClassifierOptimizer {
             }
         }
         System.out.println();
-        Log.i(TAG, String.format("Best EER with %d: %.4f %%", bestInt, minEER * 100));
+        Log.i(TAG, String.format("Best EER: %.4f %%", minEER * 100));
         return bestInt;
     }
 
@@ -204,7 +204,7 @@ class StatisticalClassifierOptimizer {
             System.out.print("]");
         }
         System.out.println();
-        Log.i(TAG, String.format("Best EER: %.4f %%", minEER * 100));
+        Log.i(TAG, String.format("Best EER with %d: %.4f %%", bestInts[0], minEER * 100));
         return bestInts;
     }
 
