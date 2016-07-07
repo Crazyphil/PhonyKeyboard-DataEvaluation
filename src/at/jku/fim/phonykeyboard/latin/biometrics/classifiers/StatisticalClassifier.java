@@ -418,6 +418,8 @@ public class StatisticalClassifier extends Classifier {
         double temp = 0;
         int E = acquisitions.get(delta).length;
         int tu = findTemplateDynamics(delta);
+        if (tu == -1) return Double.NaN; // No template found, because feature is empty
+
         for (int e = 0; e < E; e++) {  // SUM(e=1, E, e!=tu)
             if (e == tu) continue;
             temp += getDistance(acquisitions.get(delta)[e], acquisitions.get(delta)[tu]);
@@ -560,6 +562,11 @@ public class StatisticalClassifier extends Classifier {
         int skippedFeatures = 0;
         for (int delta = 0; delta < currentData.size(); delta++) {
             int tu = findTemplateDynamics(delta);
+            if (tu == -1) { // No template found, because feature is empty
+                skippedFeatures++;
+                continue;
+            }
+
             if (!ensureEqualSampleCount(delta, tu)) {
                 return Double.NaN;
             }
@@ -567,12 +574,7 @@ public class StatisticalClassifier extends Classifier {
             if (currentData.get(delta).size() > 0) {
                 double[][] sample = new double[currentData.get(delta).size()][currentData.get(delta).get(0).length];
                 double tempDist = getDistance(acquisitions.get(delta)[tu], currentData.get(delta).toArray(sample));
-
-                if (!Double.isNaN(variability[delta])) {
-                    temp += variability[delta] == 0 ? 0 : (tempDist / variability[delta]);
-                } else {
-                    skippedFeatures++;
-                }
+                temp += variability[delta] == 0 ? 0 : (tempDist / variability[delta]);
             }
         }
         temp /= currentData.size() - skippedFeatures;   // 1/δ
@@ -716,6 +718,8 @@ public class StatisticalClassifier extends Classifier {
 
         double[][] S = new double[N][N];
         for (int delta = 0; delta < acquisitions.size(); delta++) {
+            if (acquisitions.get(delta)[0].length == 0) continue;   // Skip empty features (e.g. unavailable sensors)
+
             for (int i = 0; i < N-1; i++) {
                 for (int j = i+1; j < N-1; j++) {
                     if (j == i) continue;
@@ -793,6 +797,8 @@ public class StatisticalClassifier extends Classifier {
         // Step 1: Generate the N×N dissimilarity matrix M, where entry (i, j) (i, j∈{1..N}) is the distance score between impressions i and j
         double[][] distances = new double[acquisitions.get(0).length+1][acquisitions.get(0).length+1];
         for (int delta = 0; delta < acquisitions.size(); delta++) {
+            if (acquisitions.get(delta)[0].length == 0) continue;   // Skip empty features (e.g. unavailable sensors)
+
             for (int i = 0; i < acquisitions.get(delta).length; i++) {
                 for (int j = i+1; j < acquisitions.get(delta).length; j++) {
                     distances[i][j] += getDistance(acquisitions.get(delta)[i], acquisitions.get(delta)[j]);
