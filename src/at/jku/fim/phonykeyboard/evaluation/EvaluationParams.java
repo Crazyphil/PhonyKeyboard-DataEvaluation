@@ -35,7 +35,7 @@ public class EvaluationParams {
     /**
      * Function to use for calculating variability of templates and authentication score
      */
-    public static int classificationFunction = 2;
+    public static int classificationFunction = 0;
 
     /**
      * Types of sensors to use for authenticating users
@@ -43,7 +43,8 @@ public class EvaluationParams {
     public static Set<String> usedSensors;
     static {
         usedSensors = new HashSet<>(BiometricsManager.SENSOR_TYPES.length);
-        Collections.addAll(usedSensors, BiometricsManager.SENSOR_TYPES);
+        //Collections.addAll(usedSensors, BiometricsManager.SENSOR_TYPES);
+        usedSensors.add("gravity");
     }
 
     public static String templateSelectionFunctionToString(int templateSelectionFunction) {
