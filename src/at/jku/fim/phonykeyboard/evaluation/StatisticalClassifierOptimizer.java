@@ -1,5 +1,6 @@
 package at.jku.fim.phonykeyboard.evaluation;
 
+import at.jku.fim.phonykeyboard.evaluation.plot.EERPlotter;
 import at.jku.fim.phonykeyboard.latin.biometrics.BiometricsManager;
 import at.jku.fim.phonykeyboard.latin.biometrics.BiometricsManagerImpl;
 import at.jku.fim.phonykeyboard.latin.utils.Log;
@@ -27,7 +28,7 @@ class StatisticalClassifierOptimizer {
 
     int optimizeDistanceFunction() {
         int currentFunction = EvaluationParams.distanceFunction;
-        int bestFunction = optimizeFunction(MAX_DISTANCE_FUNCTION, new ParameterProxy<Integer>() {
+        int bestFunction = optimizeFunction("Distance Function", MAX_DISTANCE_FUNCTION, new ParameterProxy<Integer>() {
             @Override
             public Integer get() {
                 return EvaluationParams.distanceFunction;
@@ -37,6 +38,11 @@ class StatisticalClassifierOptimizer {
             public void set(Integer value) {
                 EvaluationParams.distanceFunction = value;
             }
+
+            @Override
+            public String toString() {
+                return EvaluationParams.distanceFunctionToString(EvaluationParams.distanceFunction);
+            }
         });
         EvaluationParams.distanceFunction = currentFunction;
         return bestFunction;
@@ -44,7 +50,7 @@ class StatisticalClassifierOptimizer {
 
     int optimizeClassificationFunction() {
         int currentFunction = EvaluationParams.classificationFunction;
-        int bestFunction = optimizeFunction(MAX_CLASSIFICATION_FUNCTION, new ParameterProxy<Integer>() {
+        int bestFunction = optimizeFunction("Classification Function", MAX_CLASSIFICATION_FUNCTION, new ParameterProxy<Integer>() {
             @Override
             public Integer get() {
                 return EvaluationParams.classificationFunction;
@@ -54,6 +60,11 @@ class StatisticalClassifierOptimizer {
             public void set(Integer value) {
                 EvaluationParams.classificationFunction = value;
             }
+
+            @Override
+            public String toString() {
+                return EvaluationParams.classificationFunctionToString(EvaluationParams.classificationFunction);
+            }
         });
         EvaluationParams.classificationFunction = currentFunction;
         return bestFunction;
@@ -61,7 +72,7 @@ class StatisticalClassifierOptimizer {
 
     int optimizeAcquisitionSetSize() {
         int currentSize = EvaluationParams.acquisitionSetSize;
-        int bestSize = optimizeSetSize(MAX_ACQUISITION_SET_SIZE, new ParameterProxy<Integer>() {
+        int bestSize = optimizeSetSize("Acquisition Set Size", MAX_ACQUISITION_SET_SIZE, new ParameterProxy<Integer>() {
             @Override
             public Integer get() {
                 return EvaluationParams.acquisitionSetSize;
@@ -78,7 +89,7 @@ class StatisticalClassifierOptimizer {
 
     int optimizeTemplateSelectionFunction() {
         int currentFunction = EvaluationParams.templateSelectionFunction;
-        int bestFunction = optimizeFunction(MAX_TEMPLATE_SELECTION_FUNCTION, new ParameterProxy<Integer>() {
+        int bestFunction = optimizeFunction("Template Selection Function", MAX_TEMPLATE_SELECTION_FUNCTION, new ParameterProxy<Integer>() {
             @Override
             public Integer get() {
                 return EvaluationParams.templateSelectionFunction;
@@ -88,6 +99,11 @@ class StatisticalClassifierOptimizer {
             public void set(Integer value) {
                 EvaluationParams.templateSelectionFunction = value;
             }
+
+            @Override
+            public String toString() {
+                return EvaluationParams.templateSelectionFunctionToString(EvaluationParams.templateSelectionFunction);
+            }
         });
         EvaluationParams.templateSelectionFunction = currentFunction;
         return bestFunction;
@@ -95,7 +111,7 @@ class StatisticalClassifierOptimizer {
 
     int optimizeTemplateSetSize() {
         int currentSize = EvaluationParams.templateSetSize;
-        int bestSize = optimizeSetSize(EvaluationParams.acquisitionSetSize, new ParameterProxy<Integer>() {
+        int bestSize = optimizeSetSize("Template Set Size", EvaluationParams.acquisitionSetSize, new ParameterProxy<Integer>() {
             @Override
             public Integer get() {
                 return EvaluationParams.templateSetSize;
@@ -113,7 +129,7 @@ class StatisticalClassifierOptimizer {
     int[] optimizeTemplate() {
         int currentSize = EvaluationParams.templateSetSize;
         int currentFunction = EvaluationParams.templateSelectionFunction;
-        int[] best = optimizeInts(0, MAX_TEMPLATE_SELECTION_FUNCTION, 2, EvaluationParams.acquisitionSetSize, new ParameterProxy<Integer>() {
+        int[] best = optimizeInts("Template Selection", 0, MAX_TEMPLATE_SELECTION_FUNCTION, 2, EvaluationParams.acquisitionSetSize, new ParameterProxy<Integer>() {
             @Override
             public Integer get() {
                 return EvaluationParams.templateSelectionFunction;
@@ -122,6 +138,11 @@ class StatisticalClassifierOptimizer {
             @Override
             public void set(Integer value) {
                 EvaluationParams.templateSelectionFunction = value;
+            }
+
+            @Override
+            public String toString() {
+                return EvaluationParams.templateSelectionFunctionToString(EvaluationParams.templateSelectionFunction);
             }
         }, new ParameterProxy<Integer>() {
             @Override
@@ -142,7 +163,7 @@ class StatisticalClassifierOptimizer {
     Set<String> optimizeSensorSet() {
         Set<String> sensorSet = new HashSet<>(BiometricsManager.SENSOR_TYPES.length);
         Collections.addAll(sensorSet, BiometricsManager.SENSOR_TYPES);
-        Set<String> bestSet = optimizeSet(sensorSet, new ParameterProxy<Set<String>>() {
+        Set<String> bestSet = optimizeSet("Sensor Set", sensorSet, new ParameterProxy<Set<String>>() {
             @Override
             public Set<String> get() {
                 return EvaluationParams.usedSensors;
@@ -156,22 +177,31 @@ class StatisticalClassifierOptimizer {
         return bestSet;
     }
 
-    private int optimizeFunction(int maxValue, ParameterProxy<Integer> proxy) {
-        return optimizeInt(0, maxValue, proxy);
+    private int optimizeFunction(String title, int maxValue, ParameterProxy<Integer> proxy) {
+        return optimizeInt(title, 0, maxValue, proxy, false);
     }
 
-    private int optimizeSetSize(int maxValue, ParameterProxy<Integer> proxy) {
-        return optimizeInt(2, maxValue, proxy);
+    private int optimizeSetSize(String title, int maxValue, ParameterProxy<Integer> proxy) {
+        return optimizeInt(title, 2, maxValue, proxy, true);
     }
 
-    private int optimizeInt(int minValue, int maxValue, ParameterProxy<Integer> proxy) {
+    private int optimizeInt(String title, int minValue, int maxValue, ParameterProxy<Integer> proxy, boolean isRange) {
         double minEER = Double.POSITIVE_INFINITY;
         int bestInt = 0;
+        List<AbstractMap.SimpleEntry<Integer, Double>> rangeEers = new ArrayList<>(maxValue - minValue);
+        List<AbstractMap.SimpleEntry<String, Double>> elementEers = new ArrayList<>(maxValue - minValue);
         for (int i = minValue; i <= maxValue; i++) {
             System.out.print(" ");
             System.out.print(i);
             proxy.set(i);
+
             double eer = processFiles();
+            if (isRange) {
+                rangeEers.add(new AbstractMap.SimpleEntry<>(i, eer));
+            } else {
+                elementEers.add(new AbstractMap.SimpleEntry<>(proxy.toString(), eer));
+            }
+
             if (eer < minEER) {
                 minEER = eer;
                 bestInt = i;
@@ -179,22 +209,33 @@ class StatisticalClassifierOptimizer {
         }
         System.out.println();
         Log.i(TAG, String.format("Best EER: %.4f %%", minEER * 100));
+        if (isRange) {
+            EERPlotter.plotSize(title, rangeEers);
+        } else {
+            EERPlotter.plotFunction(title, elementEers);
+        }
         return bestInt;
     }
 
-    private int[] optimizeInts(int min1, int max1, int min2, int max2, ParameterProxy<Integer> proxy1, ParameterProxy<Integer> proxy2) {
+    private int[] optimizeInts(String title, int min1, int max1, int min2, int max2, ParameterProxy<Integer> proxy1, ParameterProxy<Integer> proxy2) {
         double minEER = Double.POSITIVE_INFINITY;
         int[] bestInts = new int[2];
+        String[] titles = new String[max1 - min1 + 1];
+        List<AbstractMap.SimpleEntry<Integer, Double>>[] eers = new ArrayList[max1 - min1 + 1];
         for (int i = min1; i <= max1; i++) {
             System.out.print(" ");
             System.out.print(i);
             System.out.print("[");
             proxy1.set(i);
+
+            titles[i - min1] = proxy1.toString();
+            eers[i - min1] = new ArrayList<>(max2 - min2);
             for (int j = min2; j <= max2; j++) {
                 System.out.print(" ");
                 System.out.print(j);
                 proxy2.set(j);
                 double eer = processFiles();
+                eers[i - min1].add(new AbstractMap.SimpleEntry<>(j, eer));
                 if (eer < minEER) {
                     minEER = eer;
                     bestInts[0] = i;
@@ -205,18 +246,21 @@ class StatisticalClassifierOptimizer {
         }
         System.out.println();
         Log.i(TAG, String.format("Best EER with %d: %.4f %%", bestInts[0], minEER * 100));
+        EERPlotter.plotSizes(title, titles, eers);
         return bestInts;
     }
 
-    private <T> Set<T> optimizeSet(Set<T> setItems, ParameterProxy<Set<T>> proxy) {
+    private <T> Set<T> optimizeSet(String title, Set<T> setItems, ParameterProxy<Set<T>> proxy) {
         double minEER = Double.POSITIVE_INFINITY;
         Set<T> bestSet = new HashSet<>(setItems.size());
         Set<Set<T>> powerSet = Sets.powerSet(setItems);
+        List<AbstractMap.SimpleEntry<Set<T>, Double>> eers = new ArrayList<>((int)Math.pow(2, setItems.size()));
         for (Set<T> set : powerSet) {
             System.out.print(" ");
             System.out.print(powerSetToString(set));
             proxy.set(set);
             double eer = processFiles();
+            eers.add(new AbstractMap.SimpleEntry<>(set, eer));
             if (eer < minEER) {
                 minEER = eer;
                 bestSet.clear();
@@ -225,6 +269,7 @@ class StatisticalClassifierOptimizer {
         }
         System.out.println();
         Log.i(TAG, String.format("Best EER: %.4f %%", minEER * 100));
+        EERPlotter.plotSet(title, eers);
         return bestSet;
     }
 
@@ -293,5 +338,6 @@ class StatisticalClassifierOptimizer {
     private interface ParameterProxy<T> {
         T get();
         void set(T value);
+        String toString();
     }
 }
