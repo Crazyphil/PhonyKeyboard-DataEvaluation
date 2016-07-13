@@ -30,7 +30,7 @@ public class EvaluationParams {
     /**
      * Function to use for calculating the distance between samples
      */
-    public static int distanceFunction = 0;
+    public static int distanceFunction = 1;
 
     /**
      * Function to use for calculating variability of templates and authentication score
@@ -45,6 +45,7 @@ public class EvaluationParams {
         usedSensors = new HashSet<>(BiometricsManager.SENSOR_TYPES.length);
         //Collections.addAll(usedSensors, BiometricsManager.SENSOR_TYPES);
         usedSensors.add("gravity");
+        usedSensors.add("accelerometer");
     }
 
     public static String templateSelectionFunctionToString(int templateSelectionFunction) {
@@ -68,10 +69,10 @@ public class EvaluationParams {
     public static String distanceFunctionToString(int distanceFunction) {
         switch (distanceFunction) {
             case 1:
-                return "manhattanDistance";
+                return "euclideanDistance";
             case 0:
             default:
-                return "euclideanDistance";
+                return "manhattanDistance";
         }
     }
 
