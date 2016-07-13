@@ -98,7 +98,7 @@ public class TwoDPlot<XType, YType> {
             plotter.setKey(JavaPlot.Key.OFF);
         }
 
-        plotter.getDebugger().setLevel(Debug.VERBOSE);
+        //plotter.getDebugger().setLevel(Debug.VERBOSE);
         plotter.plot();
 
         if (filename == null) {
