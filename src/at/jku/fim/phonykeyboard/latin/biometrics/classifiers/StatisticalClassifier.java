@@ -15,11 +15,14 @@ import com.apporiented.algorithm.clustering.Cluster;
 import com.apporiented.algorithm.clustering.ClusteringAlgorithm;
 import com.apporiented.algorithm.clustering.CompleteLinkageStrategy;
 import com.apporiented.algorithm.clustering.DefaultClusteringAlgorithm;
+import org.apache.commons.math3.exception.DimensionMismatchException;
 import org.apache.commons.math3.ml.clustering.CentroidCluster;
 import org.apache.commons.math3.ml.clustering.FuzzyKMeansClusterer;
 import org.apache.commons.math3.ml.distance.DistanceMeasure;
 import org.apache.commons.math3.ml.distance.EuclideanDistance;
 import org.apache.commons.math3.ml.distance.ManhattanDistance;
+import org.apache.commons.math3.util.FastMath;
+import org.apache.commons.math3.util.MathArrays;
 
 /**
  * This Classifier implements the statistical classifier proposed by Maiorana, et al. 2011, extended by further features.
@@ -265,11 +268,11 @@ public class StatisticalClassifier extends Classifier {
         DistanceMeasure measure;
         switch (EvaluationParams.distanceFunction) {
             case 1:
-                measure = new EuclideanDistance();
+                measure = new NormalizedEuclideanDistance();
                 break;
             default:
             case 0:
-                measure = new ManhattanDistance();
+                measure = new NormalizedManhattanDistance();
                 break;
         }
 
@@ -993,5 +996,30 @@ levels:             for (int j = i + 1; j < cut.size(); j++) {
             return false;
         }
         return true;
+    }
+
+    private class NormalizedManhattanDistance implements DistanceMeasure {
+        @Override
+        public double compute(double[] k1, double[] k2) throws DimensionMismatchException {
+            MathArrays.checkEqualLength(k1, k2);
+            double sum = 0;
+            for (int i = 0; i < k1.length; i++) {
+                sum += FastMath.abs(k1[i] - k2[i]);
+            }
+            return sum / (double)k1.length;
+        }
+    }
+
+    private class NormalizedEuclideanDistance implements DistanceMeasure {
+        @Override
+        public double compute(double[] k1, double[] k2) throws DimensionMismatchException {
+            MathArrays.checkEqualLength(k1, k2);
+            double sum = 0;
+            for (int i = 0; i < k1.length; i++) {
+                final double dp = k1[i] - k2[i];
+                sum += dp * dp;
+            }
+            return sum / (double)k1.length;
+        }
     }
 }
