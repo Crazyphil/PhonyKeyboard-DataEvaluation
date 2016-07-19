@@ -13,7 +13,7 @@ class StatisticalClassifierOptimizer {
     private static final String TAG = "StatisticalClassifierOptimizer";
 
     private static final int MAX_ACQUISITION_SET_SIZE = 99;
-    private static final int MAX_TEMPLATE_SELECTION_FUNCTION = 5;
+    private static final int MAX_TEMPLATE_SELECTION_FUNCTION = 6;
     private static final int MAX_DISTANCE_FUNCTION = 1;
     private static final int MAX_CLASSIFICATION_FUNCTION = 3;
     private static final double THRESHOLD_INCREMENT = 0.01;

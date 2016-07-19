@@ -25,7 +25,7 @@ public class EvaluationParams {
     /**
      * Function to use for selecting the best templates
      */
-    public static int templateSelectionFunction = 2;
+    public static int templateSelectionFunction = 3;
 
     /**
      * Function to use for calculating the distance between samples
@@ -55,10 +55,12 @@ public class EvaluationParams {
             case 1:
                 return "mdistMin";
             case 3:
-                return "gmms";
+                return "gmmsMin";
             case 4:
-                return "dend";
+                return "gmmsMax";
             case 5:
+                return "dend";
+            case 6:
                 return "fuzzyCMeans";
             case 2:
             default:

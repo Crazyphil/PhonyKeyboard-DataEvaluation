@@ -21,7 +21,6 @@ import org.apache.commons.math3.ml.clustering.FuzzyKMeansClusterer;
 import org.apache.commons.math3.ml.distance.DistanceMeasure;
 import org.apache.commons.math3.ml.distance.EuclideanDistance;
 import org.apache.commons.math3.ml.distance.ManhattanDistance;
-import org.apache.commons.math3.util.FastMath;
 import org.apache.commons.math3.util.MathArrays;
 
 /**
@@ -268,15 +267,15 @@ public class StatisticalClassifier extends Classifier {
         DistanceMeasure measure;
         switch (EvaluationParams.distanceFunction) {
             case 1:
-                measure = new NormalizedEuclideanDistance();
+                measure = new SquaredEuclideanDistance();
                 break;
             default:
             case 0:
-                measure = new NormalizedManhattanDistance();
+                measure = new ManhattanDistance();
                 break;
         }
 
-        // Calculate distance for all features
+        // Calculate distance for all samples
         for (int k = 0; k < f1.length; k++) {
             distance += measure.compute(f1[k], f2[k]);
         }
@@ -649,12 +648,15 @@ public class StatisticalClassifier extends Classifier {
                 mdistSelect(c, false);
                 break;
             case 3:
-                gmmsSelect(c);
+                gmmsSelect(c, true);
                 break;
             case 4:
-                dendSelect(c);
+                gmmsSelect(c, false);
                 break;
             case 5:
+                dendSelect(c);
+                break;
+            case 6:
                 fuzzyCMeansSelect(c);
                 break;
             case 0:
@@ -714,7 +716,7 @@ public class StatisticalClassifier extends Classifier {
     /**
      * Implementation of the Greedy Maximum Match Scores algorithm in Li et. al. 2008
      */
-    private void gmmsSelect(Cursor c) {
+    private void gmmsSelect(Cursor c, boolean minSelect) {
         // Initialize N, K, S(N×N), Choose[K]
         int N = acquisitions.get(0).length + 1, K = EvaluationParams.templateSetSize;
         int[] Choose = new int[K];
@@ -739,24 +741,24 @@ public class StatisticalClassifier extends Classifier {
         }
 
         for (int i = 0; i < K; i++) {
-            // Find j* where sum(j*) >= sum(j); sum(j) = SUM(m=1, N, m!=j), j=1..N
+            // Find j* where sum(j*) >= sum(j) (or minSelect && sum(j*) <= sum(j)); sum(j) = SUM(m=1, N, m!=j), j=1..N
             int jStar = 0;
-            double maxSumJ = 0;
+            double bestSumJ = minSelect ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY;
             for (int j = 0; j < N; j++) {
                 double sumJ = 0;
                 for (int m = 0; m < N; m++) {
                     if (m == j) continue;
                     sumJ += S[j][m];
                 }
-                if (sumJ >= maxSumJ) {
+                if (minSelect && sumJ >= bestSumJ || !minSelect && sumJ <= bestSumJ) {
                     jStar = j;
-                    maxSumJ = sumJ;
+                    bestSumJ = sumJ;
                 }
             }
 
             Choose[i] = jStar;
             for (int m = 0; m < N; m++) {
-                S[jStar][m] = 0;
+                S[jStar][m] = minSelect ? 0 : Double.POSITIVE_INFINITY;
                 S[m][jStar] = 0;
             }
         }
@@ -998,19 +1000,7 @@ levels:             for (int j = i + 1; j < cut.size(); j++) {
         return true;
     }
 
-    private class NormalizedManhattanDistance implements DistanceMeasure {
-        @Override
-        public double compute(double[] k1, double[] k2) throws DimensionMismatchException {
-            MathArrays.checkEqualLength(k1, k2);
-            double sum = 0;
-            for (int i = 0; i < k1.length; i++) {
-                sum += FastMath.abs(k1[i] - k2[i]);
-            }
-            return sum / (double)k1.length;
-        }
-    }
-
-    private class NormalizedEuclideanDistance implements DistanceMeasure {
+    private class SquaredEuclideanDistance implements DistanceMeasure {
         @Override
         public double compute(double[] k1, double[] k2) throws DimensionMismatchException {
             MathArrays.checkEqualLength(k1, k2);
@@ -1019,7 +1009,7 @@ levels:             for (int j = i + 1; j < cut.size(); j++) {
                 final double dp = k1[i] - k2[i];
                 sum += dp * dp;
             }
-            return sum / (double)k1.length;
+            return sum;
         }
     }
 }
