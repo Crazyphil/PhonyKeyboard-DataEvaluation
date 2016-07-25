@@ -34,10 +34,10 @@ public class StatisticalClassifierEvaluation {
             findOptimumParams(cmd.getOptionValue("p"), cmd.hasOption("s"));
         } else {
             if (cmd.hasOption("o")) {
-                processCsvFile(cmd.getOptionValue("o"), false, null);
+                processCsvFile(cmd.getOptionValue("o"), false, false, null);
             }
             if (cmd.hasOption("e")) {
-                processCsvFile(cmd.getOptionValue("e"), true, null);
+                processCsvFile(cmd.getOptionValue("e"), true, false, null);
             }
         }
     }
@@ -121,7 +121,7 @@ public class StatisticalClassifierEvaluation {
         Log.i(TAG, sb.toString());
     }
 
-    static void processCsvFile(String csvFile, boolean evaluationMode, ScoreListener listener) {
+    static void processCsvFile(String csvFile, boolean evaluationMode, boolean randomize, ScoreListener listener) {
         CSVReader reader = null;
         try {
             reader = new CSVReader(new BufferedReader(new FileReader(csvFile)), CsvUtils.COMMA, CsvUtils.QUOTE);
@@ -130,6 +130,7 @@ public class StatisticalClassifierEvaluation {
             e.printStackTrace();
         }
 
+        ArrayList<Acquisition> acquisitions = new ArrayList<>(140);
         try {
             String[] line = reader.readNext();
             while (line != null) {
@@ -140,7 +141,10 @@ public class StatisticalClassifierEvaluation {
                 }
                 if (reader.getRecordsRead() > 1) {
                     Log.i(TAG, String.format("Processing entry %d", reader.getRecordsRead()));
-                    processLine(line, evaluationMode, listener);
+                    Acquisition acquisition = processLine(line, evaluationMode, randomize, listener);
+                    if (randomize && acquisition != null) {
+                        acquisitions.add(acquisition);
+                    }
                 } else {
                     Log.i(TAG, "Creating column index mapping");
                     for (int i = 0; i < line.length; i++) {
@@ -154,9 +158,16 @@ public class StatisticalClassifierEvaluation {
         } catch (IOException | NullPointerException e) {
             e.printStackTrace();
         }
+
+        if (randomize) {
+            Collections.shuffle(acquisitions);
+            for (Acquisition acquisition : acquisitions) {
+                calcScoreAndFire(acquisition, evaluationMode, listener);
+            }
+        }
     }
 
-    private static void processLine(String[] line, boolean evaluationMode, ScoreListener listener) {
+    private static Acquisition processLine(String[] line, boolean evaluationMode, boolean randomize, ScoreListener listener) {
         int id = toInt(line[columnMapping.get(StatisticalClassifierContract.StatisticalClassifierData._ID)]);
         long timestamp = toLong(line[columnMapping.get(StatisticalClassifierContract.CaptureClassifierData.COLUMN_TIMESTAMP)]);
         int screenOrientation = toInt(line[columnMapping.get(StatisticalClassifierContract.StatisticalClassifierData.COLUMN_SCREEN_ORIENTATION)]);
@@ -188,12 +199,12 @@ public class StatisticalClassifierEvaluation {
         Log.i(TAG, String.format("Processing study id %d", id));
         if (upDistances.length != NUM_EVALUATION_KEYPRESSES || downDistances.length != upDistances.length - 1) {
             Log.e(TAG, String.format("ID %d: Invalid number of keypresses, skipping try", id));
-            return;
+            return null;
         }
         if (upDistances.length != positions.length || positions.length != sizes.length || sizes.length != orientations.length
                 || orientations.length != pressures.length) {
             Log.e(TAG, String.format("ID %d: Unequal number of data points, skipping try", id));
-            return;
+            return null;
         }
 
         Keypress[] keypresses = new Keypress[upDistances.length];
@@ -215,7 +226,7 @@ public class StatisticalClassifierEvaluation {
                         keypresses[i].addSensorData(toFloatArray(sensor[i - 1]));
                     } else {
                         Log.e(TAG, String.format("ID %d: A sensor has no data for keypress %d, skipping try", id, i + 1));
-                        return;
+                        return null;
                     }
                 }
             }
@@ -225,26 +236,35 @@ public class StatisticalClassifierEvaluation {
         for (int i = 0; i < sensors.size(); i++) {
             keypresses[0].addSensorData(new float[keypresses[1].getSensorData().get(i).length]);
         }
-        double score = calcScore(id, timestamp, screenOrientation, keypresses, sensors.size(), evaluationMode);
+
+        Acquisition acquisition = new Acquisition(id, timestamp, screenOrientation, keypresses, sensors.size());
+        if (!randomize) {
+            calcScoreAndFire(acquisition, evaluationMode, listener);
+        }
+        return acquisition;
+    }
+
+    private static void calcScoreAndFire(Acquisition acquisition, boolean evaluationMode, ScoreListener listener) {
+        double score = calcScore(acquisition, evaluationMode);
         if (listener != null) {
             listener.onScoreCalculated(score);
         }
     }
 
-    private static double calcScore(int tryId, long timestamp, int screenOrientation, Keypress[] keypresses, int sensorCount, boolean evaluationMode) {
+    private static double calcScore(Acquisition acquisition, boolean evaluationMode) {
         BiometricsManagerImpl manager = (BiometricsManagerImpl)BiometricsManager.getInstance();
-        manager.setScreenOrientation(screenOrientation);
+        manager.setScreenOrientation(acquisition.getScreenOrientation());
         StatisticalClassifier classifier = (StatisticalClassifier)manager.getClassifier();
         classifier.onCreate();
 
         classifier.onStartInput(manager.getBiometricsContext(), false);
-        long entryTimestamp = timestamp;
-        for (int i = 0; i < keypresses.length; i++) {
-            Keypress keypress = keypresses[i];
+        long entryTimestamp = acquisition.getTimestamp();
+        for (int i = 0; i < acquisition.getKeypresses().length; i++) {
+            Keypress keypress = acquisition.getKeypresses()[i];
             entryTimestamp += keypress.getDownDistance();
             for (int downOrUp = 0; downOrUp <= 1; downOrUp++) {
-                BiometricsEntry entry = new BiometricsEntry(sensorCount);
-                entry.setProperties(i, downOrUp, entryTimestamp + (int)keypress.getUpDistance() * downOrUp, keypress.getX(), keypress.getY(), keypress.getSize(), keypress.getOrientation(), keypress.getPressure(), screenOrientation);
+                BiometricsEntry entry = new BiometricsEntry(acquisition.getSensorCount());
+                entry.setProperties(i, downOrUp, entryTimestamp + (int)keypress.getUpDistance() * downOrUp, keypress.getX(), keypress.getY(), keypress.getSize(), keypress.getOrientation(), keypress.getPressure(), acquisition.getScreenOrientation());
                 entry.setSensorData(keypress.getSensorData());
                 classifier.onKeyEvent(entry);
             }
@@ -253,13 +273,13 @@ public class StatisticalClassifierEvaluation {
 
         double score = classifier.getScore(evaluationMode);
         if (score == BiometricsManager.SCORE_CAPTURING_ERROR) {
-            Log.e(TAG, String.format("ID %d: Capturing error, check data", tryId));
+            Log.e(TAG, String.format("ID %d: Capturing error, check data", acquisition.getTryId()));
         } else if (score == BiometricsManager.SCORE_NOT_ENOUGH_DATA) {
             Log.i(TAG, "No score yet, need more data");
         } else {
             Log.i(TAG, String.format("Score: %f", score));
         }
-        Log.data(String.format("%d\t%f", tryId, score));
+        Log.data(String.format("%d\t%f", acquisition.getTryId(), score));
         classifier.onDestroy();
         return score;
     }

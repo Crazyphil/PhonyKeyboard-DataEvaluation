@@ -12,6 +12,9 @@ import java.util.*;
 class StatisticalClassifierOptimizer {
     private static final String TAG = "StatisticalClassifierOptimizer";
 
+    private static final int NUM_OPTIMIZATION_RUNS = 5;
+    private static final boolean RANDOM_OPTIMIZATION = true;
+
     private static final int MAX_ACQUISITION_SET_SIZE = 99;
     private static final int MAX_TEMPLATE_SELECTION_FUNCTION = 6;
     private static final int MAX_DISTANCE_FUNCTION = 1;
@@ -293,13 +296,15 @@ class StatisticalClassifierOptimizer {
         Log.setSilent(true);
         List<Double> p = new ArrayList<>();
         List<Double> n = new ArrayList<>();
-        for (int i = 0; i < csvFiles.length; i++) {
-            StatisticalClassifierEvaluation.processCsvFile(makeAbsolute(csvFiles[i]), false, score -> addScore(p, score));
-            for (int j = 0; j < csvFiles.length; j++) {
-                if (j == i) continue;
-                StatisticalClassifierEvaluation.processCsvFile(makeAbsolute(csvFiles[j]), true, score -> addScore(n, score));
+        for (int r = 0; r < NUM_OPTIMIZATION_RUNS; r++) {
+            for (int i = 0; i < csvFiles.length; i++) {
+                StatisticalClassifierEvaluation.processCsvFile(makeAbsolute(csvFiles[i]), false, RANDOM_OPTIMIZATION, score -> addScore(p, score));
+                for (int j = 0; j < csvFiles.length; j++) {
+                    if (j == i) continue;
+                    StatisticalClassifierEvaluation.processCsvFile(makeAbsolute(csvFiles[j]), true, RANDOM_OPTIMIZATION, score -> addScore(n, score));
+                }
+                ((BiometricsManagerImpl)BiometricsManager.getInstance()).getClassifier().clearData();
             }
-            ((BiometricsManagerImpl)BiometricsManager.getInstance()).getClassifier().clearData();
         }
         Log.setSilent(false);
         return calcEER(p, n);
