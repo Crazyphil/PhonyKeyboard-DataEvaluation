@@ -6,6 +6,7 @@ import com.panayotis.gnuplot.style.Style;
 import java.util.*;
 
 public class EERPlotter {
+    private static final boolean PLOT_ENABLED = false;
     private static final boolean PLOT_TO_FILE = true;
 
     public static <T> void plotSize(String title, Collection<AbstractMap.SimpleEntry<T, Double>> data) {
@@ -33,7 +34,10 @@ public class EERPlotter {
     }
 
     private static <T> void plot(String axisLabel, String[] dataTitles, Collection<AbstractMap.SimpleEntry<T, Double>>[] data, String graphName, boolean isBoxChart) {
-        TwoDPlot<T, Double> plot = new TwoDPlot<>();
+        if (!PLOT_ENABLED) return;
+
+        TwoDPlot<T, Double> plot = new TwoDPlot<>(false);
+        double widthMultiplier = 1;
         for (int i = 0; i < data.length; i++) {
             plot.addData(data[i]);
             plot.setDataTitle(i, dataTitles[i]);
@@ -46,13 +50,16 @@ public class EERPlotter {
                 plot.setProperty("xtics", "left rotate offset 0,1");
                 plot.setProperty("tics", "front");
             }
+            if (data.length > 10) {
+                widthMultiplier = 2;
+            }
         }
         plot.setTitle("EER" + (graphName != null ? " of " + graphName : (dataTitles.length == 1 ? " of " + dataTitles[0] : "")));
         plot.getYAxis().setBoundaries(0, 0.3);
         plot.getYAxis().setLabel("EER");
 
         plot.getXAxis().setLabel(axisLabel);
-        plot.plot(graphName != null ? graphName.toLowerCase().replace(' ', '-') : null);
+        plot.plot(graphName != null ? graphName.toLowerCase().replace(' ', '-') : null, widthMultiplier, 1);
     }
 
     private static <T> String setToAxisLabel(Set<T> set) {
