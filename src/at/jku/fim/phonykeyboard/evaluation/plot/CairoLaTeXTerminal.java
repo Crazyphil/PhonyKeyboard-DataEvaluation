@@ -2,13 +2,14 @@ package at.jku.fim.phonykeyboard.evaluation.plot;
 
 import com.panayotis.gnuplot.terminal.TextFileTerminal;
 
-public class EPSLaTeXTerminal extends TextFileTerminal {
-    public EPSLaTeXTerminal() {
+public class CairoLaTeXTerminal extends TextFileTerminal {
+    public CairoLaTeXTerminal() {
         this("");
     }
 
-    public EPSLaTeXTerminal(String filename) {
-        super("epslatex", filename);
+    public CairoLaTeXTerminal(String filename) {
+        super("cairolatex", filename);
+        setEPS(false);
         setColor(true);
     }
 
@@ -27,6 +28,16 @@ public class EPSLaTeXTerminal extends TextFileTerminal {
         } else {
             this.set("monochrome");
             this.unset("color");
+        }
+    }
+
+    public void setEPS(boolean useEPS) {
+        if (useEPS) {
+            this.set("eps");
+            this.unset("pdf");
+        } else {
+            this.set("pdf");
+            this.unset("eps");
         }
     }
 }
