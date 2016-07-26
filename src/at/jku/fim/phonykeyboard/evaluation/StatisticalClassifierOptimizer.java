@@ -12,8 +12,8 @@ import java.util.*;
 class StatisticalClassifierOptimizer {
     private static final String TAG = "StatisticalClassifierOptimizer";
 
-    private static final int NUM_OPTIMIZATION_RUNS = 5;
-    private static final boolean RANDOM_OPTIMIZATION = true;
+    private static final int NUM_OPTIMIZATION_RUNS = 1;
+    private static final boolean RANDOM_OPTIMIZATION = false;
 
     private static final int MAX_ACQUISITION_SET_SIZE = 99;
     private static final int MAX_TEMPLATE_SELECTION_FUNCTION = 6;
@@ -26,7 +26,7 @@ class StatisticalClassifierOptimizer {
 
     StatisticalClassifierOptimizer(String csvFilePath, boolean skipControlGroup) {
         this.csvFilePath = csvFilePath;
-        csvFiles = new File(csvFilePath).list((dir, name) -> name.endsWith(".csv") && !name.endsWith(".old.csv") && (!skipControlGroup || !name.endsWith("cg.csv")));
+        csvFiles = new File(csvFilePath).list((dir, name) -> name.endsWith(".csv") && !name.endsWith(".old.csv") && (!skipControlGroup || !name.endsWith("cg.csv") && (!RANDOM_OPTIMIZATION || name.contains(".random."))));
     }
 
     int optimizeDistanceFunction() {
@@ -294,20 +294,24 @@ class StatisticalClassifierOptimizer {
 
     private double processFiles() {
         Log.setSilent(true);
-        List<Double> p = new ArrayList<>();
-        List<Double> n = new ArrayList<>();
+        double eer = 0;
         for (int r = 0; r < NUM_OPTIMIZATION_RUNS; r++) {
+            List<Double> p = new ArrayList<>();
+            List<Double> n = new ArrayList<>();
             for (int i = 0; i < csvFiles.length; i++) {
                 StatisticalClassifierEvaluation.processCsvFile(makeAbsolute(csvFiles[i]), false, RANDOM_OPTIMIZATION, score -> addScore(p, score));
                 for (int j = 0; j < csvFiles.length; j++) {
                     if (j == i) continue;
                     StatisticalClassifierEvaluation.processCsvFile(makeAbsolute(csvFiles[j]), true, RANDOM_OPTIMIZATION, score -> addScore(n, score));
                 }
-                ((BiometricsManagerImpl)BiometricsManager.getInstance()).getClassifier().clearData();
+                ((BiometricsManagerImpl) BiometricsManager.getInstance()).getClassifier().clearData();
             }
+            eer += calcEER(p, n, false);
         }
         Log.setSilent(false);
-        return calcEER(p, n);
+        eer /= NUM_OPTIMIZATION_RUNS;
+        System.out.print(String.format("(%.2f %%)", eer * 100));
+        return eer;
     }
 
     private String makeAbsolute(String fileName) {
@@ -320,7 +324,7 @@ class StatisticalClassifierOptimizer {
         }
     }
 
-    double calcEER(List<Double> p, List<Double> n) {
+    double calcEER(List<Double> p, List<Double> n, boolean print) {
         double threshold = 0;
         int numP = 0, numN = 0;
         while (numN < p.size() - numP && numN < n.size()) {
@@ -336,7 +340,9 @@ class StatisticalClassifierOptimizer {
         }
 
         double eer = numN / (double)n.size();
-        System.out.print(String.format("(%.2f %%)", eer * 100));
+        if (print) {
+            System.out.print(String.format("(%.2f %%)", eer * 100));
+        }
         return eer;
     }
 

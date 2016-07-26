@@ -32,6 +32,8 @@ public class StatisticalClassifierEvaluation {
 
         if (cmd.hasOption("p")) {
             findOptimumParams(cmd.getOptionValue("p"), cmd.hasOption("s"));
+        } else if (cmd.hasOption("g")) {
+            plotData(cmd.getOptionValue("g"));
         } else {
             if (cmd.hasOption("o")) {
                 processCsvFile(cmd.getOptionValue("o"), false, false, null);
@@ -48,6 +50,7 @@ public class StatisticalClassifierEvaluation {
         group.setRequired(true);
         group.addOption(Option.builder("o").hasArg().type(String.class).desc("Ordered mode, evaluate one user as given in file").build());
         group.addOption(Option.builder("p").hasArg().type(String.class).desc("Parameter optimization mode, does magic").build());
+        group.addOption(Option.builder("g").hasArg().type(String.class).desc("Plot graphs for data").build());
         options.addOption("d", "Only output data to STDOUT instead of full log");
         options.addOption("e", true, "A file that should be evaluated using the original mode's data");
         options.addOption("s", "Skip data of control group participants in optimization mode");
@@ -65,6 +68,9 @@ public class StatisticalClassifierEvaluation {
             }
             if (cmd.hasOption("p")) {
                 ensureDirectoryExists(cmd.getOptionValue("p"));
+            }
+            if (cmd.hasOption("g")) {
+                ensureDirectoryExists(cmd.getOptionValue("g"));
             }
             if (cmd.hasOption("e")) {
                 ensureFileExists(cmd.getOptionValue("e"));
@@ -121,7 +127,22 @@ public class StatisticalClassifierEvaluation {
         Log.i(TAG, sb.toString());
     }
 
+    private static void plotData(String csvFilePath) {
+        RawDataPlots plots = new RawDataPlots(csvFilePath);
+        plots.plotTimeline();
+        plots.plotVariation();
+        plots.plotGravity();
+    }
+
     static void processCsvFile(String csvFile, boolean evaluationMode, boolean randomize, ScoreListener listener) {
+        processCsvFile(csvFile, evaluationMode, randomize, listener, null);
+    }
+
+    static void processCsvFile(String csvFile, CSVLineProcessor processor) {
+        processCsvFile(csvFile, false, false, null, processor);
+    }
+
+    private static void processCsvFile(String csvFile, boolean evaluationMode, boolean randomize, ScoreListener listener, CSVLineProcessor processor) {
         CSVReader reader = null;
         try {
             reader = new CSVReader(new BufferedReader(new FileReader(csvFile)), CsvUtils.COMMA, CsvUtils.QUOTE);
@@ -130,7 +151,7 @@ public class StatisticalClassifierEvaluation {
             e.printStackTrace();
         }
 
-        ArrayList<Acquisition> acquisitions = new ArrayList<>(140);
+        ArrayList<Acquisition> acquisitions = new ArrayList<>(162);
         try {
             String[] line = reader.readNext();
             while (line != null) {
@@ -142,7 +163,7 @@ public class StatisticalClassifierEvaluation {
                 if (reader.getRecordsRead() > 1) {
                     Log.i(TAG, String.format("Processing entry %d", reader.getRecordsRead()));
                     Acquisition acquisition = processLine(line, evaluationMode, randomize, listener);
-                    if (randomize && acquisition != null) {
+                    if ((randomize || processor != null) && acquisition != null) {
                         acquisitions.add(acquisition);
                     }
                 } else {
@@ -159,10 +180,16 @@ public class StatisticalClassifierEvaluation {
             e.printStackTrace();
         }
 
-        if (randomize) {
-            Collections.shuffle(acquisitions);
+        if (randomize || processor != null) {
+            if (randomize) {
+                Collections.shuffle(acquisitions);
+            }
             for (Acquisition acquisition : acquisitions) {
-                calcScoreAndFire(acquisition, evaluationMode, listener);
+                if (processor != null) {
+                    processor.process(acquisition);
+                } else {
+                    calcScoreAndFire(acquisition, evaluationMode, listener);
+                }
             }
         }
     }
@@ -312,5 +339,9 @@ public class StatisticalClassifierEvaluation {
             floats[i] = toFloat(values[i]);
         }
         return floats;
+    }
+
+    public interface CSVLineProcessor {
+        void process(Acquisition acquisition);
     }
 }

@@ -35,27 +35,27 @@ public class StatisticalClassifierOptimizerTest {
     public void testCalcEER() {
         List<Double> p = new ArrayList<>(10);
         List<Double> n = new ArrayList<>(10);
-        double result = optimizer.calcEER(p, n);
+        double result = optimizer.calcEER(p, n, true);
         assertTrue(Double.isNaN(result));
 
         p.add(0.1);
         n.add(0.2);
-        assertEquals(0, optimizer.calcEER(p, n), 0);
+        assertEquals(0, optimizer.calcEER(p, n, true), 0);
 
         p.add(0.2);
         n.add(0.1);
-        assertEquals(0.5, optimizer.calcEER(p, n), 0);
+        assertEquals(0.5, optimizer.calcEER(p, n, true), 0);
 
         for (int i = 1; i <= 2; i++) {
             p.add(0.1);
             n.add(0.2);
         }
-        assertEquals(0.25, optimizer.calcEER(p, n), 0);
+        assertEquals(0.25, optimizer.calcEER(p, n, true), 0);
 
         for (int i = 1; i <= 2; i++) {
             p.add(0.2);
             n.add(0.1);
         }
-        assertEquals(0.5, optimizer.calcEER(p, n), 0);
+        assertEquals(0.5, optimizer.calcEER(p, n, true), 0);
     }
 }
