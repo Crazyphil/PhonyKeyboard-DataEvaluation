@@ -129,9 +129,12 @@ public class StatisticalClassifierEvaluation {
 
     private static void plotData(String csvFilePath) {
         RawDataPlots plots = new RawDataPlots(csvFilePath);
-        plots.plotTimeline();
-        plots.plotVariation();
-        plots.plotGravity();
+        //plots.plotTimeline();
+        //plots.plotVariation();
+        //plots.plotSensors();
+        //plots.plotQuestionnaire();
+        plots.plotSituationSensors();
+        //plots.plotROC();
     }
 
     static void processCsvFile(String csvFile, boolean evaluationMode, boolean randomize, ScoreListener listener) {
@@ -206,7 +209,7 @@ public class StatisticalClassifierEvaluation {
             // Support both old and new study files
             key = entryPattern.split(line[columnMapping.get(StatisticalClassifierContract.CaptureClassifierData.COLUMN_KEY)]);
             inputmethod = toInt(line[columnMapping.get(StatisticalClassifierContract.CaptureClassifierData.COLUMN_INPUTMETHOD)]);
-            situation = toInt(line[columnMapping.get(StatisticalClassifierContract.CaptureClassifierData.COLUMN_INPUTMETHOD)]);
+            situation = toInt(line[columnMapping.get(StatisticalClassifierContract.CaptureClassifierData.COLUMN_SITUATION)]);
         }
 
         String[] downDistances = entryPattern.split(line[columnMapping.get(StatisticalClassifierContract.StatisticalClassifierData.COLUMN_KEY_DOWNDOWN)]);
@@ -241,7 +244,7 @@ public class StatisticalClassifierEvaluation {
                 downDistance = toFloat(downDistances[i-1]);
             }
             float upDistance = toFloat(upDistances[i]);
-            float[] position = toFloatArray(positions[i]);
+            float[] position = toFloatArray(positions[i], 0);
             float size = toFloat(sizes[i]);
             float orientation = toFloat(orientations[i]);
             float pressure = toFloat(pressures[i]);
@@ -250,7 +253,7 @@ public class StatisticalClassifierEvaluation {
             if (i > 0) {
                 for (String[] sensor : sensors) {
                     if (sensor.length > 0) {
-                        keypresses[i].addSensorData(toFloatArray(sensor[i - 1]));
+                        keypresses[i].addSensorData(toFloatArray(sensor[i - 1], 3));
                     } else {
                         Log.e(TAG, String.format("ID %d: A sensor has no data for keypress %d, skipping try", id, i + 1));
                         return null;
@@ -264,7 +267,7 @@ public class StatisticalClassifierEvaluation {
             keypresses[0].addSensorData(new float[keypresses[1].getSensorData().get(i).length]);
         }
 
-        Acquisition acquisition = new Acquisition(id, timestamp, screenOrientation, keypresses, sensors.size());
+        Acquisition acquisition = new Acquisition(id, timestamp, screenOrientation, situation, inputmethod, keypresses, sensors.size());
         if (!randomize) {
             calcScoreAndFire(acquisition, evaluationMode, listener);
         }
@@ -332,10 +335,11 @@ public class StatisticalClassifierEvaluation {
         return Float.valueOf(value);
     }
 
-    private static float[] toFloatArray(String value) {
+    private static float[] toFloatArray(String value, int limit) {
         String[] values = arrayPattern.split(value);
-        float[] floats = new float[values.length];
-        for (int i = 0; i < values.length; i++) {
+        int max = limit <= 0 ? values.length : limit;
+        float[] floats = new float[max];
+        for (int i = 0; i < limit; i++) {
             floats[i] = toFloat(values[i]);
         }
         return floats;

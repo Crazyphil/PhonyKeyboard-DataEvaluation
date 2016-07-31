@@ -6,11 +6,14 @@ public class Acquisition {
     private int screenOrientation;
     private Keypress[] keypresses;
     private int sensorCount;
+    private int situation, inputMethod;
 
-    public Acquisition(int tryId, long timestamp, int screenOrientation, Keypress[] keypresses, int sensorCount) {
+    public Acquisition(int tryId, long timestamp, int screenOrientation, int situation, int inputMethod, Keypress[] keypresses, int sensorCount) {
         this.tryId = tryId;
         this.timestamp = timestamp;
         this.screenOrientation = screenOrientation;
+        this.situation = situation;
+        this.inputMethod = inputMethod;
         this.keypresses = keypresses;
         this.sensorCount = sensorCount;
     }
@@ -25,6 +28,14 @@ public class Acquisition {
 
     public int getScreenOrientation() {
         return screenOrientation;
+    }
+
+    public int getSituation() {
+        return situation;
+    }
+
+    public int getInputMethod() {
+        return inputMethod;
     }
 
     public Keypress[] getKeypresses() {
