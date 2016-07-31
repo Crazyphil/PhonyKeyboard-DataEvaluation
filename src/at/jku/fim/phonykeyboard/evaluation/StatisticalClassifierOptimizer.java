@@ -19,7 +19,7 @@ class StatisticalClassifierOptimizer {
     private static final int MAX_TEMPLATE_SELECTION_FUNCTION = 6;
     private static final int MAX_DISTANCE_FUNCTION = 1;
     private static final int MAX_CLASSIFICATION_FUNCTION = 3;
-    private static final double THRESHOLD_INCREMENT = 0.01;
+    static final double THRESHOLD_INCREMENT = 0.01;
 
     private String csvFilePath;
     private String[] csvFiles;
@@ -75,6 +75,7 @@ class StatisticalClassifierOptimizer {
 
     int optimizeAcquisitionSetSize() {
         int currentSize = EvaluationParams.acquisitionSetSize;
+        int currentTemplateSize = EvaluationParams.templateSetSize;
         int bestSize = optimizeSetSize("Acquisition Set Size", MAX_ACQUISITION_SET_SIZE, new ParameterProxy<Integer>() {
             @Override
             public Integer get() {
@@ -84,9 +85,11 @@ class StatisticalClassifierOptimizer {
             @Override
             public void set(Integer value) {
                 EvaluationParams.acquisitionSetSize = value;
+                EvaluationParams.templateSetSize = Math.min(EvaluationParams.acquisitionSetSize, currentTemplateSize);
             }
         });
         EvaluationParams.acquisitionSetSize = currentSize;
+        EvaluationParams.templateSetSize = currentTemplateSize;
         return bestSize;
     }
 
