@@ -41,7 +41,7 @@ public class EERPlotter {
         for (int i = 0; i < data.length; i++) {
             plot.addData(data[i]);
             plot.setDataTitle(i, dataTitles[i]);
-            plot.getDataStyle(i).setStyle(isBoxChart ? Style.BOXES : Style.LINESPOINTS);
+            plot.getDataStyle(i).setStyle(isBoxChart ? Style.BOXES : (data[i].size() > 10 ? Style.LINES : Style.LINESPOINTS));
             if (isBoxChart) {
                 FillStyle fill = new FillStyle(FillStyle.Fill.SOLID);
                 fill.setDensity(1);
@@ -55,8 +55,8 @@ public class EERPlotter {
             }
         }
         plot.setTitle("EER" + (graphName != null ? " of " + graphName : (dataTitles.length == 1 ? " of " + dataTitles[0] : "")));
-        plot.getYAxis().setBoundaries(0, 0.3);
-        plot.getYAxis().setLabel("EER");
+        plot.getYAxis().setBoundaries(0, 0.2);
+        plot.getYAxis().setLabel("EER [\\%]");
 
         plot.getXAxis().setLabel(axisLabel);
         plot.plot(graphName != null ? graphName.toLowerCase().replace(' ', '-') : null, widthMultiplier, 1);
