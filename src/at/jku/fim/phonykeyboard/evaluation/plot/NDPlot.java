@@ -25,6 +25,19 @@ public class NDPlot<T> extends Plot<List<T>> {
         return data.get(i).getList();
     }
 
+
+    public void setDataColumnHeaders(int i, String... columnHeaders) {
+        data.get(i).setColumnHeaders(columnHeaders);
+    }
+
+    public void setDataColumnHeaders(int i, Collection<String> columnHeaders) {
+        data.get(i).setColumnHeaders(columnHeaders);
+    }
+
+    public List<String> getDataColumnHeaders(int i) {
+        return data.get(i).getColumnHeaders();
+    }
+
     private class NDDataSetProxy<T> extends DataSetProxy<List<T>> {
         public NDDataSetProxy(List<List<T>> list) {
             super(list);
@@ -38,7 +51,7 @@ public class NDPlot<T> extends Plot<List<T>> {
         }
 
         @Override
-        public String getPointValue(int point, int dimension) {
+        public String getListValue(int point, int dimension) {
             return String.valueOf(list.get(point).get(dimension));
         }
     }

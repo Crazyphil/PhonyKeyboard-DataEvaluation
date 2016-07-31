@@ -60,6 +60,12 @@ public abstract class Plot<DataType> {
         ((AbstractPlot)plotter.getPlots().get(i)).setTitle(title);
     }
 
+    public abstract void setDataColumnHeaders(int i, String... columnHeaders);
+
+    public abstract void setDataColumnHeaders(int i, Collection<String> columnHeaders);
+
+    public abstract List<String> getDataColumnHeaders(int i);
+
     public PlotStyle getDataStyle(int i) {
         return ((AbstractPlot)plotter.getPlots().get(i)).getPlotStyle();
     }
@@ -78,7 +84,7 @@ public abstract class Plot<DataType> {
             File plotDir = new File("./plots/");
             plotDir.mkdir();
             CairoLaTeXTerminal epsTerm = new CairoLaTeXTerminal(new File(plotDir, filename + ".tex").getAbsolutePath().replace('\\', '/'));
-            epsTerm.set("size", String.format(Locale.ENGLISH, "5*%f,3.5*%f", widthMultiplier, heightMultiplier));
+            epsTerm.set("size", String.format(Locale.ENGLISH, "11.8*%fcm,8.27*%fcm", widthMultiplier, heightMultiplier));
             plotter.setTerminal(epsTerm);
         } else {
             jplot = new JPlot(plotter);

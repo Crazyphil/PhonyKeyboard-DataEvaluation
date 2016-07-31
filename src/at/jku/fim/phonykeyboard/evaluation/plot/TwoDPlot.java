@@ -23,6 +23,18 @@ public class TwoDPlot<XType, YType> extends Plot<AbstractMap.SimpleEntry<XType, 
         return data.size() - 1;
     }
 
+    public void setDataColumnHeaders(int i, String... columnHeaders) {
+        data.get(i).setColumnHeaders(columnHeaders);
+    }
+
+    public void setDataColumnHeaders(int i, Collection<String> columnHeaders) {
+        data.get(i).setColumnHeaders(columnHeaders);
+    }
+
+    public List<String> getDataColumnHeaders(int i) {
+        return data.get(i).getColumnHeaders();
+    }
+
     public void clearData() {
         super.clearData();
         data.clear();
@@ -45,11 +57,6 @@ public class TwoDPlot<XType, YType> extends Plot<AbstractMap.SimpleEntry<XType, 
         }
 
         @Override
-        /**
-         * Retrieve how many points this data set has.
-         *
-         * @return the number of points
-         */
         public int getDimensions() {
             if (list.size() == 0 || list.get(0) == null) {
                 return -1;
@@ -58,15 +65,7 @@ public class TwoDPlot<XType, YType> extends Plot<AbstractMap.SimpleEntry<XType, 
         }
 
         @Override
-        /**
-         * Retrieve data information from a point.
-         *
-         * @param point The point number
-         * @param dimension The point dimension (or "column") to request data from
-         * @return the point data for this dimension
-         * @see DataSet#getPointValue(int,int)
-         */
-        public String getPointValue(int point, int dimension) {
+        protected String getListValue(int point, int dimension) {
             String value;
             if (dimension == 0) {
                 if (hasLabels()) {

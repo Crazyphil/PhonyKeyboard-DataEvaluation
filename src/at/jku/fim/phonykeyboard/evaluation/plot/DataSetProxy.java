@@ -1,12 +1,13 @@
 package at.jku.fim.phonykeyboard.evaluation.plot;
 
+import com.google.common.collect.Lists;
 import com.panayotis.gnuplot.dataset.DataSet;
 
-import java.util.AbstractMap;
-import java.util.List;
+import java.util.*;
 
 public abstract class DataSetProxy<DataType> implements DataSet {
     protected List<DataType> list;
+    protected List<String> columnHeaders;
 
     public DataSetProxy(List<DataType> list) {
         this.list = list;
@@ -20,9 +21,26 @@ public abstract class DataSetProxy<DataType> implements DataSet {
         this.list = list;
     }
 
+    public List<String> getColumnHeaders() {
+        return columnHeaders;
+    }
+
+    public void setColumnHeaders(Collection<String> columnHeaders) {
+        columnHeaders = new ArrayList<>(columnHeaders);
+    }
+
+    public void setColumnHeaders(String... columnHeaders) {
+        this.columnHeaders = new ArrayList<>(columnHeaders.length);
+        Collections.addAll(this.columnHeaders, columnHeaders);
+    }
+
     @Override
     public int size() {
-        return list.size();
+        if (columnHeaders != null) {
+            return list.size() + 1;
+        } else {
+            return list.size();
+        }
     }
 
     @Override
@@ -42,5 +60,13 @@ public abstract class DataSetProxy<DataType> implements DataSet {
      * @return the point data for this dimension
      * @see DataSet#getPointValue(int,int)
      */
-    public abstract String getPointValue(int point, int dimension);
+    public String getPointValue(int point, int dimension) {
+        if (columnHeaders != null && point == 0) {
+            return String.format("\"%s\"", columnHeaders.get(dimension));
+        } else {
+            return getListValue(columnHeaders != null ? point - 1 : point, dimension);
+        }
+    }
+
+    protected abstract String getListValue(int point, int dimension);
 }
