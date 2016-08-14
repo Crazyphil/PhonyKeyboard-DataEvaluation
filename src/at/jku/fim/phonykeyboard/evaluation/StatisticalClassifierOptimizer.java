@@ -203,9 +203,9 @@ class StatisticalClassifierOptimizer {
 
             double eer = processFiles();
             if (isRange) {
-                rangeEers.add(new AbstractMap.SimpleEntry<>(i, eer));
+                rangeEers.add(new AbstractMap.SimpleEntry<>(i, eer * 100));
             } else {
-                elementEers.add(new AbstractMap.SimpleEntry<>(proxy.toString(), eer));
+                elementEers.add(new AbstractMap.SimpleEntry<>(proxy.toString(), eer * 100));
             }
 
             if (eer < minEER) {
@@ -241,7 +241,7 @@ class StatisticalClassifierOptimizer {
                 System.out.print(j);
                 proxy2.set(j);
                 double eer = processFiles();
-                eers[i - min1].add(new AbstractMap.SimpleEntry<>(j, eer));
+                eers[i - min1].add(new AbstractMap.SimpleEntry<>(j, eer * 100));
                 if (eer < minEER) {
                     minEER = eer;
                     bestInts[0] = i;
@@ -266,7 +266,7 @@ class StatisticalClassifierOptimizer {
             System.out.print(powerSetToString(set));
             proxy.set(set);
             double eer = processFiles();
-            eers.add(new AbstractMap.SimpleEntry<>(set, eer));
+            eers.add(new AbstractMap.SimpleEntry<>(set, eer * 100));
             if (eer < minEER) {
                 minEER = eer;
                 bestSet.clear();

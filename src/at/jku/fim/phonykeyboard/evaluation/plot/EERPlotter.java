@@ -55,7 +55,7 @@ public class EERPlotter {
             }
         }
         plot.setTitle("EER" + (graphName != null ? " of " + graphName : (dataTitles.length == 1 ? " of " + dataTitles[0] : "")));
-        plot.getYAxis().setBoundaries(0, 0.2);
+        plot.getYAxis().setBoundaries(0, 20);
         plot.getYAxis().setLabel("EER [\\%]");
 
         plot.getXAxis().setLabel(axisLabel);
