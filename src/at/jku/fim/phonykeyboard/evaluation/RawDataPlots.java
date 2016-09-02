@@ -1,6 +1,7 @@
 package at.jku.fim.phonykeyboard.evaluation;
 
 import at.jku.fim.phonykeyboard.evaluation.plot.NDPlot;
+import at.jku.fim.phonykeyboard.evaluation.plot.Plot;
 import at.jku.fim.phonykeyboard.evaluation.plot.TwoDPlot;
 import at.jku.fim.phonykeyboard.latin.biometrics.BiometricsManager;
 import at.jku.fim.phonykeyboard.latin.biometrics.BiometricsManagerImpl;
@@ -25,7 +26,7 @@ public class RawDataPlots {
 
     RawDataPlots(String csvFilePath) {
         this.csvFilePath = csvFilePath;
-        csvFiles = new File(csvFilePath).list((dir, name) -> name.endsWith(".csv") && !name.endsWith(".old.csv") && !name.contains(".random."));
+        csvFiles = new File(csvFilePath).list((dir, name) -> name.endsWith(".csv") && !name.endsWith(".old.csv") && !name.contains(".random.")/* && !name.contains(".cg.csv")*/);
         participants = new List[csvFiles.length];
         Log.setSilent(true);
         for (int i = 0; i < csvFiles.length; i++) {
@@ -124,7 +125,8 @@ public class RawDataPlots {
             }
             if (1 - (numP / (double)p.size()) > numN / (double)n.size()) {
                 eerThreshold = threshold;
-                eer = numN / (double)n.size();
+                //eer = numN / (double)n.size();
+                eer = (numN / (double)n.size() + 1 - numP / (double)p.size()) / 2d;
             }
             threshold += StatisticalClassifierOptimizer.THRESHOLD_INCREMENT;
 
@@ -140,8 +142,8 @@ public class RawDataPlots {
         plot.setDataProperty(0, "using", "1:2");
 
         plot.setTitle("ROC");
-        plot.getXAxis().setLabel("True Positive Rate");
-        plot.getYAxis().setLabel("False Positive Rate");
+        plot.getXAxis().setLabel("False Positive Rate");
+        plot.getYAxis().setLabel("True Positive Rate");
         plot.setProperty("grid", null);
         plot.setProperty("size", "square");
         plot.setProperty("xtics", "0,0.1,1");
@@ -232,10 +234,11 @@ public class RawDataPlots {
             plot.setTitle("Digraph Distribution");
         }
 
-        plot.setProperty("linetype 1", "linecolor rgb \"#999400d3\"");
+        /*plot.setProperty("linetype 1", "linecolor rgb \"#999400d3\"");
         plot.setProperty("linetype 2", "linecolor rgb \"#99009e73\"");
         plot.setProperty("linetype 3", "linecolor rgb \"#9956b4e9\"");
-        plot.setProperty("linetype 4", "linecolor rgb \"#99e69f00\"");
+        plot.setProperty("linetype 4", "linecolor rgb \"#99e69f00\"");*/
+        setParticipantColors(plot);
         if (holdTime) {
             plot.setProperty("xtics", "(\"\" 1, \"2\" 2, \"l\" 3, \"i\" 4, \"r\" 5, \"a\" 6, \"7\" 7) nomirror scale 0,0");
         } else {
@@ -265,20 +268,14 @@ public class RawDataPlots {
             plot.setDataProperty(i, "using", "1:2:3:xtic(\"\"):ytic(\"\"):ztic(\"\")");
         }
         plot.setTitle(String.format("%s Sensor", CaseFormat.LOWER_UNDERSCORE.to(CaseFormat.UPPER_CAMEL, BiometricsManager.SENSOR_TYPES[index])));
-        plot.setProperty("linetype 1", "linecolor rgb \"#779400d3\"");
-        plot.setProperty("linetype 2", "linecolor rgb \"#77009e73\"");
-        plot.setProperty("linetype 3", "linecolor rgb \"#7756b4e9\"");
-        plot.setProperty("linetype 4", "linecolor rgb \"#77e69f00\"");
+        setParticipantColors(plot);
         plot.getXAxis().setLabel("X");
         plot.getYAxis().setLabel("Y");
         plot.getZAxis().setLabel("Z");
         plot.setProperty("grid", "xtics ytics ztics");
         plot.setProperty("xtics", "add autofreq");
         plot.setProperty("xtics offset", "-0.5,-0.5");
-        plot.setProperty("xlabel offset", "-0.5,-0.5");
-        plot.setProperty("ytics", "add autofreq");
-        //plot.setProperty("ytics offset", "0.5,-0.5");
-        plot.setProperty("ylabel offset", "0.5,-0.5");
+        plot.setProperty("ytics", "add autofreq offset 0.5,-0.5");
         plot.setProperty("ztics", "add autofreq");
         StringBuffer sb = new StringBuffer(5);
         sb.append(BiometricsManager.SENSOR_TYPES[index].replace('_', '-'));
@@ -323,5 +320,16 @@ public class RawDataPlots {
 
     private String makeAbsolute(String fileName) {
         return String.format("%s%s%s", csvFilePath, File.separator, fileName);
+    }
+
+    private void setParticipantColors(Plot<?> plot) {
+        /*plot.setProperty("linetype 1", "linecolor rgb \"#999400d3\"");
+        plot.setProperty("linetype 2", "linecolor rgb \"#99009e73\"");
+        plot.setProperty("linetype 3", "linecolor rgb \"#9956b4e9\"");
+        plot.setProperty("linetype 4", "linecolor rgb \"#99e69f00\"");*/
+        plot.setProperty("linetype 1", "linecolor rgb \"#990080ff\"");
+        plot.setProperty("linetype 2", "linecolor rgb \"#9900a000\"");
+        plot.setProperty("linetype 3", "linecolor rgb \"#99ff0000\"");
+        plot.setProperty("linetype 4", "linecolor rgb \"#99eeee00\"");
     }
 }
