@@ -18,6 +18,7 @@ public class StatisticalClassifierEvaluation {
     private static final String TAG = "StatisticalClassifierEvaluation";
     private static final int NUM_STATIC_COLUMNS = 9;
     private static final int NUM_EVALUATION_KEYPRESSES = 6;
+    private static final int SENSOR_DATA_ROUNDING_FACTOR = 0;
     private static final Map<String, Integer> columnMapping = new HashMap<>();
 
     private static final Pattern entryPattern = Pattern.compile(";");
@@ -99,7 +100,7 @@ public class StatisticalClassifierEvaluation {
 
     private static void findOptimumParams(String csvFilePath, boolean skipControlGroup) {
         Log.i(TAG, "Finding optimum parameters, this might take a while");
-        StatisticalClassifierOptimizer optimizer = new StatisticalClassifierOptimizer(csvFilePath, skipControlGroup);
+        StatisticalClassifierOptimizer optimizer = new StatisticalClassifierOptimizer(csvFilePath, !skipControlGroup);
 
         Log.i(TAG, "Optimizing distance function...");
         int distance = optimizer.optimizeDistanceFunction();
@@ -129,12 +130,12 @@ public class StatisticalClassifierEvaluation {
 
     private static void plotData(String csvFilePath) {
         RawDataPlots plots = new RawDataPlots(csvFilePath);
-        //plots.plotTimeline();
-        //plots.plotVariation();
-        //plots.plotSensors();
-        //plots.plotQuestionnaire();
-        plots.plotSituationSensors();
-        //plots.plotROC();
+        /*plots.plotTimeline();
+        plots.plotVariation();
+        plots.plotSensors();
+        plots.plotQuestionnaire();
+        plots.plotSituationSensors();*/
+        plots.plotROC();
     }
 
     static void processCsvFile(String csvFile, boolean evaluationMode, boolean randomize, ScoreListener listener) {
@@ -245,15 +246,19 @@ public class StatisticalClassifierEvaluation {
             }
             float upDistance = toFloat(upDistances[i]);
             float[] position = toFloatArray(positions[i], 0);
+            //float[] position = new float[] { 0f, 0f };
             float size = toFloat(sizes[i]);
+            //float size = 0;
             float orientation = toFloat(orientations[i]);
+            //float orientation = 0;
             float pressure = toFloat(pressures[i]);
+            //float pressure = 0;
             keypresses[i] = new Keypress(position[0], position[1], size, orientation, pressure, downDistance, upDistance, sensors.size());
 
             if (i > 0) {
                 for (String[] sensor : sensors) {
                     if (sensor.length > 0) {
-                        keypresses[i].addSensorData(toFloatArray(sensor[i - 1], 3));
+                        keypresses[i].addSensorData(toFloatArray(sensor[i - 1], 3, true));
                     } else {
                         Log.e(TAG, String.format("ID %d: A sensor has no data for keypress %d, skipping try", id, i + 1));
                         return null;
@@ -335,14 +340,21 @@ public class StatisticalClassifierEvaluation {
         return Float.valueOf(value);
     }
 
-    private static float[] toFloatArray(String value, int limit) {
+    private static float[] toFloatArray(String value, int limit, boolean allowRounding) {
         String[] values = arrayPattern.split(value);
         int max = limit <= 0 ? values.length : limit;
         float[] floats = new float[max];
         for (int i = 0; i < limit; i++) {
             floats[i] = toFloat(values[i]);
+            if (allowRounding && SENSOR_DATA_ROUNDING_FACTOR >= 1) {
+                floats[i] = (int)(floats[i] * SENSOR_DATA_ROUNDING_FACTOR) / (float)SENSOR_DATA_ROUNDING_FACTOR;
+            }
         }
         return floats;
+    }
+
+    private static float[] toFloatArray(String value, int limit) {
+        return toFloatArray(value, limit, false);
     }
 
     public interface CSVLineProcessor {
