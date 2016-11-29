@@ -15,7 +15,7 @@ public class EvaluationParams {
     /**
      * Number of templates to use for authentication (after selection)
      */
-    public static int templateSetSize = 6;
+    public static int templateSetSize = 7;
 
     /**
      * Enables template selection
@@ -25,7 +25,7 @@ public class EvaluationParams {
     /**
      * Function to use for selecting the best templates
      */
-    public static int templateSelectionFunction = 4;
+    public static int templateSelectionFunction = 3;
 
     /**
      * Function to use for calculating the distance between samples
@@ -45,8 +45,10 @@ public class EvaluationParams {
         usedSensors = new HashSet<>(BiometricsManager.SENSOR_TYPES.length);
         //Collections.addAll(usedSensors, BiometricsManager.SENSOR_TYPES);
         usedSensors.add("gravity");
-        //usedSensors.add("accelerometer");
-        usedSensors.add("rotation_vector");
+        usedSensors.add("accelerometer");
+        //usedSensors.add("rotation_vector");
+        //usedSensors.add("linear_acceleration");
+        //usedSensors.add("gyroscope");
     }
 
     public static String templateSelectionFunctionToString(int templateSelectionFunction) {

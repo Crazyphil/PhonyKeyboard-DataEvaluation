@@ -20,13 +20,18 @@ class StatisticalClassifierOptimizer {
     private static final int MAX_DISTANCE_FUNCTION = 1;
     private static final int MAX_CLASSIFICATION_FUNCTION = 3;
     static final double THRESHOLD_INCREMENT = 0.01;
+    private static final double OPTIMUM_THRESHOLD = 1.09;
 
     private String csvFilePath;
     private String[] csvFiles;
+    private String[] controlGroupFiles;
+    private boolean controlGroupOptimization;
 
-    StatisticalClassifierOptimizer(String csvFilePath, boolean skipControlGroup) {
+    StatisticalClassifierOptimizer(String csvFilePath, boolean optimizeControlGroup) {
         this.csvFilePath = csvFilePath;
-        csvFiles = new File(csvFilePath).list((dir, name) -> name.endsWith(".csv") && !name.endsWith(".old.csv") && (!skipControlGroup || !name.endsWith("cg.csv") && (!RANDOM_OPTIMIZATION || name.contains(".random."))));
+        csvFiles = new File(csvFilePath).list((dir, name) -> name.endsWith(".csv") && !name.endsWith(".old.csv") && !name.endsWith(".cg.csv") && !name.contains(".random."));
+        controlGroupFiles = new File(csvFilePath).list((dir, name) -> name.endsWith("cg.csv") && !name.contains(".random."));
+        controlGroupOptimization = optimizeControlGroup;
     }
 
     int optimizeDistanceFunction() {
@@ -297,24 +302,37 @@ class StatisticalClassifierOptimizer {
 
     private double processFiles() {
         Log.setSilent(true);
-        double eer = 0;
+        double eer = 0, far = 0, frr = 0;
         for (int r = 0; r < NUM_OPTIMIZATION_RUNS; r++) {
             List<Double> p = new ArrayList<>();
             List<Double> n = new ArrayList<>();
             for (int i = 0; i < csvFiles.length; i++) {
                 StatisticalClassifierEvaluation.processCsvFile(makeAbsolute(csvFiles[i]), false, RANDOM_OPTIMIZATION, score -> addScore(p, score));
-                for (int j = 0; j < csvFiles.length; j++) {
-                    if (j == i) continue;
-                    StatisticalClassifierEvaluation.processCsvFile(makeAbsolute(csvFiles[j]), true, RANDOM_OPTIMIZATION, score -> addScore(n, score));
+                for (int j = 0; controlGroupOptimization ? j < controlGroupFiles.length : j < csvFiles.length; j++) {
+                    if (!controlGroupOptimization && j == i) continue;
+                    StatisticalClassifierEvaluation.processCsvFile(makeAbsolute(controlGroupOptimization ? controlGroupFiles[j] : csvFiles[j]), true, RANDOM_OPTIMIZATION, score -> addScore(n, score));
                 }
                 ((BiometricsManagerImpl) BiometricsManager.getInstance()).getClassifier().clearData();
             }
-            eer += calcEER(p, n, false);
+            if (!controlGroupOptimization) {
+                eer += calcEER(p, n, false);
+            } else {
+                double[] error = calcError(p, n);
+                far += error[0];
+                frr += error[1];
+            }
         }
         Log.setSilent(false);
-        eer /= NUM_OPTIMIZATION_RUNS;
-        System.out.print(String.format("(%.2f %%)", eer * 100));
-        return eer;
+        if (!controlGroupOptimization) {
+            eer /= NUM_OPTIMIZATION_RUNS;
+            System.out.print(String.format("(%.2f %%)", eer * 100));
+            return eer;
+        } else {
+            frr /= NUM_OPTIMIZATION_RUNS;
+            far /= NUM_OPTIMIZATION_RUNS;
+            System.out.print(String.format("(%.2f/%.2f %%)", far * 100, frr * 100));
+            return (frr + far) / 2d;
+        }
     }
 
     private String makeAbsolute(String fileName) {
@@ -330,7 +348,7 @@ class StatisticalClassifierOptimizer {
     double calcEER(List<Double> p, List<Double> n, boolean print) {
         double threshold = 0;
         int numP = 0, numN = 0;
-        while (numN < p.size() - numP && numN < n.size()) {
+        while (numN < n.size() || numP < p.size()) {
             numP = 0;
             numN = 0;
             for (double pos : p) {
@@ -339,14 +357,28 @@ class StatisticalClassifierOptimizer {
             for (double neg : n) {
                 if (neg < threshold) numN++;
             }
+            if (1 - (numP / (double)p.size()) <= numN / (double)n.size()) {
+                break;
+            }
             threshold += THRESHOLD_INCREMENT;
         }
 
-        double eer = numN / (double)n.size();
+        double eer = (numN / (double)n.size() + 1 - numP / (double)p.size()) / 2d;
         if (print) {
             System.out.print(String.format("(%.2f %%)", eer * 100));
         }
         return eer;
+    }
+
+    private double[] calcError(List<Double> p, List<Double> n) {
+        int numP = 0, numN = 0;
+        for (double pos : p) {
+            if (pos < OPTIMUM_THRESHOLD) numP++;
+        }
+        for (double neg : n) {
+            if (neg < OPTIMUM_THRESHOLD) numN++;
+        }
+        return new double[] { numN / (double)n.size(), 1 - (numP / (double)p.size()) };
     }
 
     private interface ParameterProxy<T> {
