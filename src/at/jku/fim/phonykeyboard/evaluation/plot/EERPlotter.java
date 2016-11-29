@@ -7,7 +7,7 @@ import java.util.*;
 
 public class EERPlotter {
     private static final boolean PLOT_ENABLED = false;
-    private static final boolean PLOT_TO_FILE = true;
+    private static final boolean PLOT_TO_FILE = false;
 
     public static <T> void plotSize(String title, Collection<AbstractMap.SimpleEntry<T, Double>> data) {
         plot(title, "Size", data, false);
@@ -55,7 +55,7 @@ public class EERPlotter {
             }
         }
         plot.setTitle("EER" + (graphName != null ? " of " + graphName : (dataTitles.length == 1 ? " of " + dataTitles[0] : "")));
-        plot.getYAxis().setBoundaries(0, 20);
+        plot.getYAxis().setBoundaries(0, 45);
         plot.getYAxis().setLabel("EER [\\%]");
 
         plot.getXAxis().setLabel(axisLabel);

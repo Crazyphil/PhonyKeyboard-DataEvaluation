@@ -26,13 +26,10 @@ public class RawDataPlots {
 
     RawDataPlots(String csvFilePath) {
         this.csvFilePath = csvFilePath;
-        csvFiles = new File(csvFilePath).list((dir, name) -> name.endsWith(".csv") && !name.endsWith(".old.csv") && !name.contains(".random.")/* && !name.contains(".cg.csv")*/);
+        csvFiles = new File(csvFilePath).list((dir, name) -> name.endsWith(".csv") && !name.endsWith(".old.csv") && !name.contains(".random.") && !name.contains(".cg.csv"));
         participants = new List[csvFiles.length];
-        Log.setSilent(true);
-        for (int i = 0; i < csvFiles.length; i++) {
-            participants[i] = getAcquisitions(makeAbsolute(csvFiles[i]));
-        }
-        Log.setSilent(false);
+
+        getAcquisitions(true);
     }
 
     public void plotTimeline() {
@@ -101,15 +98,16 @@ public class RawDataPlots {
     public void plotROC() {
         List<Double> p = new ArrayList<>();
         List<Double> n = new ArrayList<>();
+        getAcquisitions(false);
         evaluate(p, n);
 
         NDPlot<Double> plot = new NDPlot<>(false);
         List<List<Double>> roc = new ArrayList<>();
         double threshold = 0;
         int numP = 0, numN = 0;
-        double zeroFAR = 0, eer = 0;
+        double zeroFAR = 0, eer = Double.POSITIVE_INFINITY, zeroFRR = 0;
         double zeroFARThreshold = 0, zeroFRRThreshold = 0, eerThreshold = 0;
-        while (numN < n.size() && numP < p.size()) {
+        while (numN < n.size() || numP < p.size()) {
             numP = 0;
             numN = 0;
             for (double pos : p) {
@@ -123,10 +121,13 @@ public class RawDataPlots {
                 zeroFARThreshold = threshold;
                 zeroFAR = numP / (double)p.size();
             }
-            if (1 - (numP / (double)p.size()) > numN / (double)n.size()) {
+            if (eer > (numN / (double)n.size() + 1 - numP / (double)p.size()) / 2d) {
                 eerThreshold = threshold;
-                //eer = numN / (double)n.size();
                 eer = (numN / (double)n.size() + 1 - numP / (double)p.size()) / 2d;
+            }
+            if (numP == p.size() && zeroFRRThreshold == 0) {
+                zeroFRRThreshold = threshold;
+                zeroFRR = numN / (double)n.size();
             }
             threshold += StatisticalClassifierOptimizer.THRESHOLD_INCREMENT;
 
@@ -136,7 +137,6 @@ public class RawDataPlots {
             roc.get(roc.size() - 1).add(numP > 0 ? numP / (double)p.size() : 0);
             roc.get(roc.size() - 1).add(threshold - StatisticalClassifierOptimizer.THRESHOLD_INCREMENT);
         }
-        zeroFRRThreshold = threshold - StatisticalClassifierOptimizer.THRESHOLD_INCREMENT;
         plot.addData(roc);
         plot.getDataStyle(0).setStyle(Style.LINES);
         plot.setDataProperty(0, "using", "1:2");
@@ -151,10 +151,10 @@ public class RawDataPlots {
 
         plot.setProperty("arrow 1", String.format(Locale.ROOT, "to 0,%1$f from 0.1,%1$f", zeroFAR));
         plot.setProperty("label 1", String.format(Locale.ROOT, "\"ZeroFAR=$%2$.2f$\" at 0.12,%1$f", zeroFAR, zeroFARThreshold));
-        plot.setProperty("arrow 2", "to 1,1 from 0.9,0.9");
-        plot.setProperty("label 2", String.format(Locale.ROOT, "\"ZeroFRR=$%.2f$\" at 0.9,0.9 right", zeroFRRThreshold));
+        plot.setProperty("arrow 2", String.format(Locale.ROOT, "to %1$f,1 from %1$f-0.05,0.9", zeroFRR));
+        plot.setProperty("label 2", String.format(Locale.ROOT, "\"ZeroFRR=$%1$.2f$\" at %2$f-0.05,0.88 rotate by -90", zeroFRRThreshold, zeroFRR));
         plot.setProperty("arrow 3", String.format(Locale.ROOT, "to %1$f,1-%1$f from %1$f+0.1,1-%1$f-0.1", eer));
-        plot.setProperty("label 3", String.format(Locale.ROOT, "\"EER=$%2$.2f$\" at %1$f+0.12,1-%1$f-0.1", eer, eerThreshold));
+        plot.setProperty("label 3", String.format(Locale.ROOT, "\"EER=$%2$.2f$\" at %1$f+0.12,1-%1$f-0.12 rotate by -45", eer, eerThreshold));
         plot.plot(PLOT_TO_FILE ? "roc" : null, PLOT_SCALE, PLOT_SCALE);
     }
 
@@ -234,10 +234,6 @@ public class RawDataPlots {
             plot.setTitle("Digraph Distribution");
         }
 
-        /*plot.setProperty("linetype 1", "linecolor rgb \"#999400d3\"");
-        plot.setProperty("linetype 2", "linecolor rgb \"#99009e73\"");
-        plot.setProperty("linetype 3", "linecolor rgb \"#9956b4e9\"");
-        plot.setProperty("linetype 4", "linecolor rgb \"#99e69f00\"");*/
         setParticipantColors(plot);
         if (holdTime) {
             plot.setProperty("xtics", "(\"\" 1, \"2\" 2, \"l\" 3, \"i\" 4, \"r\" 5, \"a\" 6, \"7\" 7) nomirror scale 0,0");
@@ -290,17 +286,28 @@ public class RawDataPlots {
         plot.plot(PLOT_TO_FILE ? sb.toString() : null, PLOT_SCALE, PLOT_SCALE);
     }
 
-    private List<Acquisition> getAcquisitions(String csvFile) {
-        // Override evaluation params so that all sensors are loaded
-        Collections.addAll(EvaluationParams.usedSensors, BiometricsManager.SENSOR_TYPES);
-
-        List<Acquisition> acquisitions = new ArrayList<>(162);
-        StatisticalClassifierEvaluation.processCsvFile(csvFile, acquisitions::add);
-        return acquisitions;
+    private void getAcquisitions(boolean loadAllSensors) {
+        Log.setSilent(true);
+        Set<String> sensors = null;
+        if (loadAllSensors) {
+            sensors = new HashSet<>(EvaluationParams.usedSensors);
+            Collections.addAll(EvaluationParams.usedSensors, BiometricsManager.SENSOR_TYPES);
+        }
+        for (int i = 0; i < csvFiles.length; i++) {
+            List<Acquisition> acquisitions = new ArrayList<>(162);
+            StatisticalClassifierEvaluation.processCsvFile(makeAbsolute(csvFiles[i]), acquisitions::add);
+            ((BiometricsManagerImpl)BiometricsManager.getInstance()).getClassifier().clearData();
+            participants[i] = acquisitions;
+        }
+        if (loadAllSensors) {
+            EvaluationParams.usedSensors = sensors;
+        }
+        Log.setSilent(false);
     }
 
     private void evaluate(List<Double> p, List<Double> n) {
         Log.setSilent(true);
+        System.out.println();
         for (int i = 0; i < csvFiles.length; i++) {
             StatisticalClassifierEvaluation.processCsvFile(makeAbsolute(csvFiles[i]), false, false, score -> addScore(p, score));
             for (int j = 0; j < csvFiles.length; j++) {
@@ -323,10 +330,6 @@ public class RawDataPlots {
     }
 
     private void setParticipantColors(Plot<?> plot) {
-        /*plot.setProperty("linetype 1", "linecolor rgb \"#999400d3\"");
-        plot.setProperty("linetype 2", "linecolor rgb \"#99009e73\"");
-        plot.setProperty("linetype 3", "linecolor rgb \"#9956b4e9\"");
-        plot.setProperty("linetype 4", "linecolor rgb \"#99e69f00\"");*/
         plot.setProperty("linetype 1", "linecolor rgb \"#990080ff\"");
         plot.setProperty("linetype 2", "linecolor rgb \"#9900a000\"");
         plot.setProperty("linetype 3", "linecolor rgb \"#99ff0000\"");
