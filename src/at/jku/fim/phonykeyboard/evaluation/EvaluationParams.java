@@ -7,6 +7,8 @@ import java.util.HashSet;
 import java.util.Set;
 
 public class EvaluationParams {
+    public static final String[] TOUCH_PROPERTIES = { "position", "size", "orientation", "pressure" };
+
     /**
      * Number of templates to acquire before selecting the best (>= templateSetSize)
      */
@@ -38,11 +40,23 @@ public class EvaluationParams {
     public static int classificationFunction = 0;
 
     /**
+     * Touch properties to use for authenticating users
+     */
+    public static Set<String> usedTouchProperties;
+    static {
+        usedTouchProperties = new HashSet<>(TOUCH_PROPERTIES.length, 1);
+        usedTouchProperties.add("position");
+        usedTouchProperties.add("size");
+        usedTouchProperties.add("orientation");
+        usedTouchProperties.add("pressure");
+    }
+
+    /**
      * Types of sensors to use for authenticating users
      */
     public static Set<String> usedSensors;
     static {
-        usedSensors = new HashSet<>(BiometricsManager.SENSOR_TYPES.length);
+        usedSensors = new HashSet<>(BiometricsManager.SENSOR_TYPES.length, 1);
         //Collections.addAll(usedSensors, BiometricsManager.SENSOR_TYPES);
         usedSensors.add("gravity");
         usedSensors.add("accelerometer");

@@ -171,6 +171,23 @@ class StatisticalClassifierOptimizer {
         return best;
     }
 
+    Set<String> optimizeTouchPropertiesSet() {
+        Set<String> touchPropertiesSet = new HashSet<>(EvaluationParams.TOUCH_PROPERTIES.length);
+        Collections.addAll(touchPropertiesSet, EvaluationParams.TOUCH_PROPERTIES);
+        Set<String> bestSet = optimizeSet("Touch Properties Set", touchPropertiesSet, new ParameterProxy<Set<String>>() {
+            @Override
+            public Set<String> get() {
+                return EvaluationParams.usedTouchProperties;
+            }
+
+            @Override
+            public void set(Set<String> value) {
+                EvaluationParams.usedTouchProperties = value;
+            }
+        });
+        return bestSet;
+    }
+
     Set<String> optimizeSensorSet() {
         Set<String> sensorSet = new HashSet<>(BiometricsManager.SENSOR_TYPES.length);
         Collections.addAll(sensorSet, BiometricsManager.SENSOR_TYPES);

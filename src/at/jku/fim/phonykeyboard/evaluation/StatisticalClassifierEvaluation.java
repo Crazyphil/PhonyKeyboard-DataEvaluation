@@ -114,7 +114,10 @@ public class StatisticalClassifierEvaluation {
         Log.i(TAG, "Optimizing template size for template selection function...");
         int[] templates = optimizer.optimizeTemplate();
 
-        Log.i(TAG, "Optimizing feature set...");
+        Log.i(TAG, "Optimizing touch properties set...");
+        Set<String> touchProperties = optimizer.optimizeTouchPropertiesSet();
+
+        Log.i(TAG, "Optimizing sensor set...");
         Set<String> sensors = optimizer.optimizeSensorSet();
 
         StringBuilder sb = new StringBuilder(7);
@@ -124,6 +127,7 @@ public class StatisticalClassifierEvaluation {
         sb.append(String.format("\n\tacquisitionSize = %d", acquisitionSize));
         sb.append(String.format("\n\ttemplate = %d (%s)", templates[0], EvaluationParams.templateSelectionFunctionToString(templates[0])));
         sb.append(String.format("\n\ttemplateSize = %d", templates[1]));
+        sb.append(String.format("\n\ttouchPropertiesSet = %s", touchProperties));
         sb.append(String.format("\n\tsensorSet = %s", sensors));
         Log.i(TAG, sb.toString());
     }
@@ -245,14 +249,30 @@ public class StatisticalClassifierEvaluation {
                 downDistance = toFloat(downDistances[i-1]);
             }
             float upDistance = toFloat(upDistances[i]);
-            float[] position = toFloatArray(positions[i], 0);
-            //float[] position = new float[] { 0f, 0f };
-            float size = toFloat(sizes[i]);
-            //float size = 0;
-            float orientation = toFloat(orientations[i]);
-            //float orientation = 0;
-            float pressure = toFloat(pressures[i]);
-            //float pressure = 0;
+            float[] position;
+            if (EvaluationParams.usedTouchProperties.contains("position")) {
+                position = toFloatArray(positions[i], 0);
+            } else {
+                position = new float[] { 0f, 0f };
+            }
+            float size;
+            if (EvaluationParams.usedTouchProperties.contains("size")) {
+                size = toFloat(sizes[i]);
+            } else {
+                size = 0;
+            }
+            float orientation;
+            if (EvaluationParams.usedTouchProperties.contains("orientation")) {
+                orientation = toFloat(orientations[i]);
+            } else {
+                orientation = 0;
+            }
+            float pressure;
+            if (EvaluationParams.usedTouchProperties.contains("pressure")) {
+                pressure = toFloat(pressures[i]);
+            } else {
+                pressure = 0;
+            }
             keypresses[i] = new Keypress(position[0], position[1], size, orientation, pressure, downDistance, upDistance, sensors.size());
 
             if (i > 0) {

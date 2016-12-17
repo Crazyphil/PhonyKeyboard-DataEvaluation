@@ -1,6 +1,5 @@
 package at.jku.fim.phonykeyboard.latin.biometrics;
 
-
 import at.jku.fim.phonykeyboard.latin.biometrics.classifiers.Classifier;
 import at.jku.fim.phonykeyboard.latin.biometrics.classifiers.StatisticalClassifier;
 import at.jku.fim.phonykeyboard.latin.biometrics.data.BiometricsDbHelper;
